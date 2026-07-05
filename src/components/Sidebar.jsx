@@ -11,6 +11,7 @@ const tabs = [
   { id: "prasadam", label: "Prasadam", icon: "🍛" },
   { id: "etiquette", label: "Etiquette", icon: "🙏" },
   { id: "donations", label: "Donations", icon: "💰" },
+  { id: "users", label: "User Management", icon: "👥" },
 ];
 
 const DEFAULT_DEPARTMENTS = [
