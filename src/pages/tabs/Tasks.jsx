@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { db } from "../../firebase";
 import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
-import { shareToWhatsApp } from "../../utils/whatsapp";
+import { shareToWhatsApp, sendWhatsAppTo } from "../../utils/whatsapp";
 
 const STATUS_COLORS = {
   "Not Started": "bg-gray-100 text-gray-600",
@@ -23,7 +23,9 @@ export default function Tasks({ eventId }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [phaseFilter, setPhaseFilter] = useState("all");
+  const [hodFilter, setHodFilter] = useState("all");
   const [collapsedPhases, setCollapsedPhases] = useState({});
+  const [showHodReport, setShowHodReport] = useState(false);
   const { userRole } = useAuth();
   const canEdit = userRole === "admin" || userRole === "spoc" || userRole === "hod";
 
@@ -44,6 +46,7 @@ export default function Tasks({ eventId }) {
   }, [eventId]);
 
   const getHodForDept = (deptName) => depts.find(d => d.name === deptName)?.hod || "";
+  const getContactForDept = (deptName) => depts.find(d => d.name === deptName)?.contact || "";
 
   const updateTask = (id, field, value) => {
     const updates = { [field]: value };
@@ -65,6 +68,9 @@ export default function Tasks({ eventId }) {
     });
   };
 
+  // Get unique HODs from departments
+  const uniqueHODs = [...new Set(depts.filter(d => d.hod).map(d => d.hod))];
+
   // Filter tasks
   const filteredTasks = tasks.filter(t => {
     const searchLower = search.toLowerCase();
@@ -74,7 +80,9 @@ export default function Tasks({ eventId }) {
       t.owner?.toLowerCase().includes(searchLower);
     const matchesStatus = statusFilter === "all" || t.status === statusFilter;
     const matchesPhase = phaseFilter === "all" || t.phase === phaseFilter;
-    return matchesSearch && matchesStatus && matchesPhase;
+    const owner = t.owner || getHodForDept(t.department);
+    const matchesHod = hodFilter === "all" || owner === hodFilter;
+    return matchesSearch && matchesStatus && matchesPhase && matchesHod;
   });
 
   const totalTasks = tasks.length;
@@ -85,6 +93,121 @@ export default function Tasks({ eventId }) {
     setCollapsedPhases(prev => ({ ...prev, [phase]: !prev[phase] }));
   };
 
+  // Generate HOD Report Text
+  const generateHodReport = (hodName) => {
+    const hodTasks = tasks.filter(t => {
+      const owner = t.owner || getHodForDept(t.department);
+      return owner === hodName;
+    });
+
+    if (hodTasks.length === 0) return null;
+
+    const notStarted = hodTasks.filter(t => t.status === "Not Started");
+    const inProgress = hodTasks.filter(t => t.status === "In Progress");
+    const blocked = hodTasks.filter(t => t.status === "Blocked");
+    const done = hodTasks.filter(t => t.status === "Done");
+    const totalPending = notStarted.length + inProgress.length + blocked.length;
+
+    // Group pending tasks by deadline urgency
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const overdue = [];
+    const dueSoon = []; // within 7 days
+    const upcoming = [];
+    const noDate = [];
+
+    [...notStarted, ...inProgress, ...blocked].forEach(t => {
+      if (!t.deadline) {
+        noDate.push(t);
+        return;
+      }
+      const deadline = new Date(t.deadline);
+      deadline.setHours(0, 0, 0, 0);
+      const daysDiff = Math.floor((deadline - today) / (1000 * 60 * 60 * 24));
+
+      if (daysDiff < 0) overdue.push({...t, daysDiff});
+      else if (daysDiff <= 7) dueSoon.push({...t, daysDiff});
+      else upcoming.push({...t, daysDiff});
+    });
+
+    // Sort by date
+    overdue.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+    dueSoon.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+    upcoming.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+
+    let text = `🙏 Hare Krishna *${hodName}*!\n\n`;
+    text += `📊 *Your Task Summary*\n`;
+    text += `━━━━━━━━━━━━━━━\n`;
+    text += `Total Tasks: ${hodTasks.length}\n`;
+    text += `✅ Done: ${done.length}\n`;
+    text += `⏳ In Progress: ${inProgress.length}\n`;
+    text += `⬜ Not Started: ${notStarted.length}\n`;
+    if (blocked.length > 0) text += `🚫 Blocked: ${blocked.length}\n`;
+    text += `\n📋 *Pending Tasks: ${totalPending}*\n`;
+
+    const formatTask = (t) => {
+      const phaseIcon = PHASE_LABELS[t.phase]?.icon || "📌";
+      const statusIcon = t.status === "In Progress" ? "⏳" : t.status === "Blocked" ? "🚫" : "⬜";
+      let taskText = `${statusIcon} ${t.title}\n`;
+      taskText += `   ${phaseIcon} ${PHASE_LABELS[t.phase]?.label || t.phase}\n`;
+      if (t.department) taskText += `   🏛️ ${t.department}\n`;
+      if (t.deadline) {
+        const d = new Date(t.deadline);
+        const formatted = d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+        taskText += `   📅 Due: ${formatted}`;
+        if (t.daysDiff !== undefined) {
+          if (t.daysDiff < 0) taskText += ` (${Math.abs(t.daysDiff)}d overdue!)`;
+          else if (t.daysDiff === 0) taskText += ` (TODAY!)`;
+          else if (t.daysDiff === 1) taskText += ` (tomorrow)`;
+          else taskText += ` (in ${t.daysDiff}d)`;
+        }
+        taskText += `\n`;
+      }
+      return taskText + `\n`;
+    };
+
+    if (overdue.length > 0) {
+      text += `\n🔴 *OVERDUE (${overdue.length})*\n━━━━━━━━━━━━━━━\n`;
+      overdue.forEach(t => text += formatTask(t));
+    }
+
+    if (dueSoon.length > 0) {
+      text += `\n🟡 *DUE THIS WEEK (${dueSoon.length})*\n━━━━━━━━━━━━━━━\n`;
+      dueSoon.forEach(t => text += formatTask(t));
+    }
+
+    if (upcoming.length > 0) {
+      text += `\n🟢 *UPCOMING (${upcoming.length})*\n━━━━━━━━━━━━━━━\n`;
+      upcoming.forEach(t => text += formatTask(t));
+    }
+
+    if (noDate.length > 0) {
+      text += `\n⚪ *NO DEADLINE (${noDate.length})*\n━━━━━━━━━━━━━━━\n`;
+      noDate.forEach(t => text += formatTask(t));
+    }
+
+    text += `\n🙏 Hare Krishna!\n_Sent via HKM Festival App_\n${window.location.origin}`;
+
+    return text;
+  };
+
+  const sendHodReport = (hodName) => {
+    const text = generateHodReport(hodName);
+    if (!text) return alert("No tasks for " + hodName);
+
+    // Find HOD's contact from any department they lead
+    const hodDept = depts.find(d => d.hod === hodName);
+    const contact = hodDept?.contact;
+
+    if (contact) {
+      sendWhatsAppTo(contact, text);
+    } else {
+      // No contact - use share (user picks contact)
+      shareToWhatsApp(text);
+    }
+  };
+
   const shareAllTasks = () => {
     let text = `✅ *Master Task Tracker* (${progress}% done)\n\n`;
     ["pre", "event", "post"].forEach(phase => {
@@ -92,7 +215,7 @@ export default function Tasks({ eventId }) {
       if (phaseTasks.length === 0) return;
       const info = PHASE_LABELS[phase];
       text += `\n${info.icon} *${info.label}*\n`;
-      phaseTasks.forEach((t, i) => {
+      phaseTasks.forEach((t) => {
         const emoji = t.status === "Done" ? "✅" : t.status === "Blocked" ? "🚫" : t.status === "In Progress" ? "⏳" : "⬜";
         text += `${emoji} ${t.title}`;
         if (t.owner) text += ` - ${t.owner}`;
@@ -111,7 +234,12 @@ export default function Tasks({ eventId }) {
             <h2 className="text-lg font-bold text-gray-800">✅ Task Tracker</h2>
             <p className="text-[10px] text-gray-500">{filteredTasks.length} of {totalTasks} · {progress}% done</p>
           </div>
-          <button onClick={shareAllTasks} className="bg-green-500 text-white p-2 rounded-lg text-xs shadow" title="Share to WhatsApp">💬</button>
+          <div className="flex gap-1">
+            <button onClick={() => setShowHodReport(!showHodReport)} className="bg-purple-500 hover:bg-purple-600 text-white p-2 rounded-lg text-xs shadow" title="Send report to HOD">
+              📤
+            </button>
+            <button onClick={shareAllTasks} className="bg-green-500 text-white p-2 rounded-lg text-xs shadow" title="Share all tasks">💬</button>
+          </div>
         </div>
 
         {/* Progress Bar */}
@@ -145,7 +273,56 @@ export default function Tasks({ eventId }) {
             </button>
           ))}
         </div>
+        {uniqueHODs.length > 0 && (
+          <div className="flex gap-1 mt-1 overflow-x-auto scrollbar-hide">
+            <p className="text-[10px] text-gray-400 font-bold self-center whitespace-nowrap">HOD:</p>
+            <button onClick={() => setHodFilter("all")} className={`flex-shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full ${hodFilter === "all" ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-600"}`}>All</button>
+            {uniqueHODs.map(hod => (
+              <button key={hod} onClick={() => setHodFilter(hod)}
+                className={`flex-shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full ${hodFilter === hod ? "bg-purple-500 text-white" : "bg-purple-50 text-purple-700"}`}>
+                👤 {hod}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* HOD Report Panel */}
+      {showHodReport && (
+        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-2xl p-4">
+          <div className="flex justify-between items-center mb-3">
+            <div>
+              <h3 className="text-sm font-bold text-purple-700">📤 Send Task Report to HOD</h3>
+              <p className="text-[10px] text-purple-600">Click any HOD to send their pending tasks via WhatsApp</p>
+            </div>
+            <button onClick={() => setShowHodReport(false)} className="text-purple-400 hover:text-purple-600 text-lg">✕</button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {uniqueHODs.map(hod => {
+              const hodTasks = tasks.filter(t => (t.owner || getHodForDept(t.department)) === hod);
+              const pending = hodTasks.filter(t => t.status !== "Done").length;
+              const contact = depts.find(d => d.hod === hod)?.contact;
+              return (
+                <button
+                  key={hod}
+                  onClick={() => sendHodReport(hod)}
+                  className="bg-white hover:bg-purple-50 border border-purple-200 hover:border-purple-400 rounded-xl p-3 text-left transition-all shadow-sm hover:shadow"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-purple-700 truncate">👤 {hod}</p>
+                      <p className="text-[10px] text-gray-500">{pending} pending / {hodTasks.length} total</p>
+                      {contact && <p className="text-[9px] text-green-600 truncate">📞 {contact}</p>}
+                      {!contact && <p className="text-[9px] text-gray-400">No phone (will use share)</p>}
+                    </div>
+                    <span className="text-lg">💬</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Phases */}
       {["pre", "event", "post"].map(phase => {
