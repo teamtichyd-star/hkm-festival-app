@@ -6,7 +6,11 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-600 via-orange-500 to-yellow-400 flex flex-col items-center justify-center p-4">
       <div className="text-center mb-8 animate-fade-in">
-        <div className="text-7xl mb-4 drop-shadow-lg">🪔</div>
+        <div className="mb-4 flex justify-center">
+          <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-2xl bg-white">
+            <img src="/logo.jpg" alt="Sri Sri Radha Krishna" className="w-full h-full object-cover" />
+          </div>
+        </div>
         <h1 className="text-4xl font-bold text-white drop-shadow-lg tracking-wide">
           HKM - GIFTS
         </h1>

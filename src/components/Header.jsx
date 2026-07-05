@@ -9,12 +9,13 @@ export default function Header({ event, onMenuClick }) {
         <div className="flex justify-between items-center">
           {/* Left */}
           <div className="flex items-center gap-3">
-            {/* Hamburger for mobile */}
             <button onClick={onMenuClick} className="md:hidden text-white text-2xl">
               ☰
             </button>
             <div className="flex items-center gap-2">
-              <span className="text-2xl">🪔</span>
+              <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/50 bg-white flex-shrink-0">
+                <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover" />
+              </div>
               <div>
                 <h1 className="text-base md:text-lg font-bold tracking-wide leading-tight">HKM - GIFTS Festivals</h1>
                 {event && (
