@@ -27,7 +27,7 @@ export default function Tasks({ eventId }) {
   const [collapsedPhases, setCollapsedPhases] = useState({});
   const [showHodReport, setShowHodReport] = useState(false);
   const { userRole } = useAuth();
-  const canEdit = userRole === "admin" || userRole === "spoc" || userRole === "hod";
+  const canEdit = true;
 
   useEffect(() => {
     const q = query(collection(db, "events", eventId, "tasks"), orderBy("order", "asc"));

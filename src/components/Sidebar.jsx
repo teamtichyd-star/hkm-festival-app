@@ -122,7 +122,7 @@ export default function Sidebar({
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ festivalName: "", location: "", date: "", details: "" });
-  const canManage = userRole === "admin" || userRole === "spoc";
+  const canManage = true;
 
   const createEvent = async () => {
     if (!form.festivalName || !form.location) return alert("Festival name and location required!");

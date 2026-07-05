@@ -19,8 +19,8 @@ export default function Requirements({ eventId }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [deptFilter, setDeptFilter] = useState("all");
   const { userRole, user, userDept } = useAuth();
-  const canAdd = userRole === "admin" || userRole === "spoc" || userRole === "hod";
-  const canUpdateStatus = userRole === "admin" || userRole === "spoc";
+  const canAdd = true;
+  const canUpdateStatus = true;
 
   useEffect(() => {
     const q = query(collection(db, "events", eventId, "requirements"), orderBy("createdAt", "desc"));

@@ -22,35 +22,24 @@ function Dashboard() {
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { userData, setCurrentEventId, getRoleForEvent } = useAuth();
 
   useEffect(() => {
     const q = query(collection(db, "events"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       const evts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      // Filter events - only show events user has access to
-      const isSuperAdmin = userData?.globalRole === "superadmin";
-      const accessibleEvents = isSuperAdmin ? evts : evts.filter(e => {
-        const role = getRoleForEvent(e.id);
-        return role && role !== "pending" && role !== "rejected";
-      });
-
-      setEvents(accessibleEvents);
-      if (!selectedEventId && accessibleEvents.length > 0) {
-        setSelectedEventId(accessibleEvents[0].id);
-        setSelectedEvent(accessibleEvents[0]);
-        setCurrentEventId(accessibleEvents[0].id);
+      setEvents(evts);
+      if (!selectedEventId && evts.length > 0) {
+        setSelectedEventId(evts[0].id);
+        setSelectedEvent(evts[0]);
       }
     });
     return () => unsub();
-  }, [userData]);
+  }, []);
 
   useEffect(() => {
     if (selectedEventId && events.length > 0) {
       const found = events.find(e => e.id === selectedEventId);
       setSelectedEvent(found || null);
-      setCurrentEventId(selectedEventId);
     }
   }, [selectedEventId, events]);
 
@@ -58,8 +47,8 @@ function Dashboard() {
     if (!selectedEventId && activeTab !== "users") return (
       <div className="flex flex-col items-center justify-center py-20 text-gray-400">
         <span className="text-5xl mb-4">🎪</span>
-        <p className="text-lg font-semibold">No event access</p>
-        <p className="text-sm text-center">You don't have access to any events yet.<br/>Contact admin for access.</p>
+        <p className="text-lg font-semibold">No event selected</p>
+        <p className="text-sm">Click "+ New Event" in sidebar</p>
       </div>
     );
     switch (activeTab) {
@@ -77,10 +66,7 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Header
-        event={selectedEvent}
-        onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-      />
+      <Header event={selectedEvent} onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           activeTab={activeTab}

@@ -8,7 +8,7 @@ export default function Donations({ eventId }) {
   const [depts, setDepts] = useState([]);
   const [reqs, setReqs] = useState([]);
   const { userRole } = useAuth();
-  const canEdit = userRole === "admin" || userRole === "spoc";
+  const canEdit = true;
 
   useEffect(() => {
     const unsub1 = onSnapshot(query(collection(db, "events", eventId, "donors"), orderBy("createdAt", "desc")), (snap) => {

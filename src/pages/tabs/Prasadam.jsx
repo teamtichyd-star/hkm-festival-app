@@ -7,7 +7,7 @@ export default function Prasadam({ eventId }) {
   const [items, setItems] = useState([]);
   const [crowd, setCrowd] = useState({ regularDevotees: 300, footfallPerKm: 800, routeKm: 3 });
   const { userRole } = useAuth();
-  const canEdit = userRole === "admin" || userRole === "spoc";
+  const canEdit = true;
 
   useEffect(() => {
     const q = query(collection(db, "events", eventId, "prasadam"), orderBy("order", "asc"));

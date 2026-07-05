@@ -22,7 +22,7 @@ export default function Departments({ eventId }) {
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [compact, setCompact] = useState(false);
   const { userRole } = useAuth();
-  const canEdit = userRole === "admin" || userRole === "spoc";
+  const canEdit = true;
 
   useEffect(() => {
     const q = query(collection(db, "events", eventId, "departments"), orderBy("order", "asc"));

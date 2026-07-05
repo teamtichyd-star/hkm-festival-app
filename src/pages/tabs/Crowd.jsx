@@ -7,7 +7,7 @@ export default function Crowd({ eventId, event }) {
   const [crowd, setCrowd] = useState({ regularDevotees: 300, footfallPerKm: 800, routeKm: 3 });
   const [checkpoints, setCheckpoints] = useState([]);
   const { userRole } = useAuth();
-  const canEdit = userRole === "admin" || userRole === "spoc";
+  const canEdit = true;
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "events", eventId, "crowd", "config"), (snap) => {
