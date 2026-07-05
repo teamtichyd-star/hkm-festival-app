@@ -15,10 +15,11 @@ export default function Users({ eventId }) {
   const [users, setUsers] = useState([]);
   const [preRegistered, setPreRegistered] = useState([]);
   const [events, setEvents] = useState([]);
-  const [depts, setDepts] = useState([]);
+  const [allDepts, setAllDepts] = useState({});
   const [inviteForm, setInviteForm] = useState({ email: "", name: "", role: "volunteer", eventId: "", departmentId: "" });
   const [showInvite, setShowInvite] = useState(false);
-  const { user, userRole } = useAuth();
+  const [expandedUser, setExpandedUser] = useState(null);
+  const { user } = useAuth();
   const isAdmin = true;
 
   useEffect(() => {
@@ -42,20 +43,23 @@ export default function Users({ eventId }) {
     return () => unsub();
   }, []);
 
+  // Load departments for ALL events
   useEffect(() => {
-    if (!eventId) return;
-    const unsub = onSnapshot(collection(db, "events", eventId, "departments"), (snap) => {
-      setDepts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsubs = [];
+    events.forEach(evt => {
+      const unsub = onSnapshot(collection(db, "events", evt.id, "departments"), (snap) => {
+        setAllDepts(prev => ({ ...prev, [evt.id]: snap.docs.map(d => ({ id: d.id, ...d.data() })) }));
+      });
+      unsubs.push(unsub);
     });
-    return () => unsub();
-  }, [eventId]);
+    return () => unsubs.forEach(u => u());
+  }, [events]);
 
-  const approveUser = async (uid, role = "viewer", customName = null, deptId = null) => {
+  const approveUser = async (uid, role = "viewer", customName = null) => {
     const updates = { status: "approved", role, globalRole: role === "admin" ? "superadmin" : role };
     if (customName) updates.name = customName;
-    if (deptId) updates.departmentId = deptId;
     await updateDoc(doc(db, "users", uid), updates);
-    alert("Approved!");
+    alert("Approved! Now assign to events below.");
   };
 
   const matchAndApprove = async (userId, preRegId) => {
@@ -67,13 +71,12 @@ export default function Users({ eventId }) {
       globalRole: preReg.role === "admin" ? "superadmin" : preReg.role,
     };
     if (preReg.name) updates.name = preReg.name;
-    if (preReg.departmentId) updates.departmentId = preReg.departmentId;
+    const currentUser = users.find(u => u.id === userId);
+    const eventRoles = { ...(currentUser?.eventRoles || {}) };
     if (preReg.eventId) {
-      const user = users.find(u => u.id === userId);
-      const eventRoles = { ...(user?.eventRoles || {}) };
       eventRoles[preReg.eventId] = { role: preReg.role, departmentId: preReg.departmentId || null };
-      updates.eventRoles = eventRoles;
     }
+    updates.eventRoles = eventRoles;
     await updateDoc(doc(db, "users", userId), updates);
     await deleteDoc(doc(db, "preRegistered", preRegId));
     alert("Matched and approved!");
@@ -92,6 +95,17 @@ export default function Users({ eventId }) {
     await updateDoc(doc(db, "users", uid), { name });
   };
 
+  const setEventRole = async (uid, evtId, role, departmentId = null) => {
+    const currentUser = users.find(u => u.id === uid);
+    const eventRoles = { ...(currentUser?.eventRoles || {}) };
+    if (role === "none") {
+      delete eventRoles[evtId];
+    } else {
+      eventRoles[evtId] = { role, departmentId: departmentId || null };
+    }
+    await updateDoc(doc(db, "users", uid), { eventRoles });
+  };
+
   const removeUser = async (uid) => {
     if (uid === user.uid) return alert("Cannot remove yourself!");
     if (!confirm("Remove this user?")) return;
@@ -100,11 +114,12 @@ export default function Users({ eventId }) {
 
   const preRegisterUser = async () => {
     if (!inviteForm.email) return alert("Email required!");
+    if (!inviteForm.eventId) return alert("Please select an event!");
     await addDoc(collection(db, "preRegistered"), {
       email: inviteForm.email.toLowerCase().trim(),
       name: inviteForm.name,
       role: inviteForm.role,
-      eventId: inviteForm.eventId || "",
+      eventId: inviteForm.eventId,
       departmentId: inviteForm.departmentId || "",
       createdAt: new Date(),
     });
@@ -117,15 +132,16 @@ export default function Users({ eventId }) {
   const approvedUsers = users.filter(u => u.status === "approved" || !u.status);
   const rejectedUsers = users.filter(u => u.status === "rejected");
 
-  // Find matching pre-registered for a pending user
   const findMatch = (email) => preRegistered.find(p => p.email === email?.toLowerCase());
+
+  const inviteDepts = allDepts[inviteForm.eventId] || [];
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-start">
         <div>
           <h2 className="text-xl font-bold text-gray-800">👥 User Management</h2>
-          <p className="text-xs text-gray-500">{users.length} users · {pendingUsers.length} pending</p>
+          <p className="text-xs text-gray-500">Event-wise access · {users.length} users</p>
         </div>
         {isAdmin && (
           <button onClick={() => setShowInvite(!showInvite)} className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md">
@@ -157,20 +173,20 @@ export default function Users({ eventId }) {
       {/* Pre-Register Form */}
       {showInvite && isAdmin && (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4">
-          <h3 className="text-sm font-bold text-orange-700 mb-3">✨ Pre-Register (name + email + role)</h3>
+          <h3 className="text-sm font-bold text-orange-700 mb-3">✨ Pre-Register for Specific Event</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <input type="email" className="border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Gmail *" value={inviteForm.email} onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} />
             <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Devotee Name" value={inviteForm.name} onChange={(e) => setInviteForm({...inviteForm, name: e.target.value})} />
+            <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={inviteForm.eventId} onChange={(e) => setInviteForm({...inviteForm, eventId: e.target.value, departmentId: ""})}>
+              <option value="">-- Select Event *--</option>
+              {events.map(e => <option key={e.id} value={e.id}>{e.festivalName} ({e.location})</option>)}
+            </select>
             <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={inviteForm.role} onChange={(e) => setInviteForm({...inviteForm, role: e.target.value})}>
               {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
-            <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={inviteForm.eventId} onChange={(e) => setInviteForm({...inviteForm, eventId: e.target.value})}>
-              <option value="">-- All Events --</option>
-              {events.map(e => <option key={e.id} value={e.id}>{e.festivalName}</option>)}
-            </select>
             <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm md:col-span-2" value={inviteForm.departmentId} onChange={(e) => setInviteForm({...inviteForm, departmentId: e.target.value})}>
-              <option value="">-- No Department --</option>
-              {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              <option value="">-- No specific Department --</option>
+              {inviteDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
           <div className="flex gap-2 mt-3">
@@ -200,27 +216,18 @@ export default function Users({ eventId }) {
 
                     {match ? (
                       <div className="bg-green-100 border border-green-300 rounded-xl p-2">
-                        <p className="text-xs font-bold text-green-700 mb-1">✨ Auto-Match Found!</p>
+                        <p className="text-xs font-bold text-green-700 mb-1">✨ Match Found!</p>
                         <p className="text-xs text-green-600">Pre-registered as: <strong>{match.name || match.email}</strong></p>
                         <p className="text-xs text-green-600">Role: <strong>{match.role}</strong></p>
+                        {match.eventId && <p className="text-xs text-green-600">Event: {events.find(e => e.id === match.eventId)?.festivalName || "-"}</p>}
                         <button onClick={() => matchAndApprove(u.id, match.id)} className="mt-2 w-full bg-green-500 text-white font-bold text-xs py-1.5 rounded-lg">
-                          ✅ Match & Approve as {match.name || u.name}
+                          ✅ Match & Approve
                         </button>
                       </div>
                     ) : (
                       <div className="flex gap-2 flex-wrap">
-                        <input
-                          type="text"
-                          placeholder="Devotee Name"
-                          defaultValue={u.name}
-                          onBlur={(e) => u.customName = e.target.value}
-                          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 flex-1 min-w-[120px]"
-                        />
-                        <select
-                          onChange={(e) => u.selectedRole = e.target.value}
-                          defaultValue="viewer"
-                          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5"
-                        >
+                        <input type="text" placeholder="Devotee Name" defaultValue={u.name} onBlur={(e) => u.customName = e.target.value} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 flex-1 min-w-[120px]" />
+                        <select onChange={(e) => u.selectedRole = e.target.value} defaultValue="viewer" className="text-xs border border-gray-200 rounded-lg px-2 py-1.5">
                           {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                         </select>
                         <button onClick={() => approveUser(u.id, u.selectedRole || "viewer", u.customName || u.name)} className="text-xs bg-green-500 text-white font-bold px-3 py-1.5 rounded-lg">✅ Approve</button>
@@ -235,7 +242,7 @@ export default function Users({ eventId }) {
         </div>
       )}
 
-      {/* Pre-Registered - not yet joined */}
+      {/* Pre-Registered */}
       {preRegistered.length > 0 && (
         <div>
           <h3 className="text-sm font-bold text-blue-700 mb-2">📧 Pre-Registered (Waiting to Sign In)</h3>
@@ -248,8 +255,8 @@ export default function Users({ eventId }) {
                     <p className="text-sm font-semibold truncate">{p.name || "(no name)"}</p>
                     <p className="text-xs text-gray-500 truncate">{p.email}</p>
                     <p className="text-xs text-gray-500">
-                      Will be: <span className="font-bold text-blue-600">{p.role}</span>
-                      {evt && <span> · {evt.festivalName}</span>}
+                      <span className="font-bold text-blue-600">{p.role}</span>
+                      {evt && <span> · {evt.festivalName} ({evt.location})</span>}
                     </p>
                   </div>
                   <button onClick={() => deleteDoc(doc(db, "preRegistered", p.id))} className="text-red-400 ml-2">✕</button>
@@ -260,36 +267,107 @@ export default function Users({ eventId }) {
         </div>
       )}
 
-      {/* Approved Users */}
+      {/* Approved Users - with Event Assignment */}
       <div>
-        <h3 className="text-sm font-bold text-green-700 mb-2">✅ Active Users</h3>
+        <h3 className="text-sm font-bold text-green-700 mb-2">✅ Active Users - Click to assign events</h3>
         <div className="space-y-2">
-          {approvedUsers.map(u => (
-            <div key={u.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3">
-              <div className="flex items-center gap-2">
-                {u.photoURL ? <img src={u.photoURL} className="w-10 h-10 rounded-full" alt=""/> : <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center font-bold text-orange-700">{(u.name||"?")[0]}</div>}
-                <div className="flex-1 min-w-0">
-                  <input
-                    className="text-sm font-bold bg-transparent border-none p-0 focus:ring-0 focus:outline-none w-full"
-                    value={u.name || ""}
-                    onChange={(e) => updateUserName(u.id, e.target.value)}
-                    placeholder="Devotee Name"
-                  />
-                  <p className="text-xs text-gray-400 truncate">
-                    {u.email} {u.id === user?.uid && <span className="text-orange-500">(You)</span>}
-                  </p>
+          {approvedUsers.map(u => {
+            const isCurrentUser = u.id === user?.uid;
+            const isSuperAdmin = u.globalRole === "superadmin" || u.role === "admin";
+            const eventCount = Object.keys(u.eventRoles || {}).length;
+            const expanded = expandedUser === u.id;
+
+            return (
+              <div key={u.id} className={`bg-white rounded-xl shadow-sm border border-gray-100 ${isCurrentUser ? "ring-2 ring-orange-300" : ""}`}>
+                {/* Header */}
+                <div className="p-3 cursor-pointer" onClick={() => setExpandedUser(expanded ? null : u.id)}>
+                  <div className="flex items-center gap-2">
+                    {u.photoURL ? <img src={u.photoURL} className="w-10 h-10 rounded-full" alt=""/> : <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center font-bold text-orange-700">{(u.name||"?")[0]}</div>}
+                    <div className="flex-1 min-w-0">
+                      <input
+                        className="text-sm font-bold bg-transparent border-none p-0 focus:ring-0 focus:outline-none w-full"
+                        value={u.name || ""}
+                        onChange={(e) => updateUserName(u.id, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Devotee Name"
+                      />
+                      <p className="text-xs text-gray-400 truncate">
+                        {u.email} {isCurrentUser && <span className="text-orange-500">(You)</span>}
+                      </p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {isSuperAdmin ? (
+                          <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">SUPER ADMIN - All Events</span>
+                        ) : eventCount === 0 ? (
+                          <span className="text-[10px] bg-red-100 text-red-500 px-2 py-0.5 rounded-full font-bold">⚠️ No event access</span>
+                        ) : (
+                          Object.entries(u.eventRoles || {}).map(([evtId, roleData]) => {
+                            const evt = events.find(e => e.id === evtId);
+                            if (!evt) return null;
+                            return (
+                              <span key={evtId} className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
+                                {roleData.role}@{evt.location}
+                              </span>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                    {isAdmin && (
+                      <div className="flex gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <select className="text-xs border border-gray-200 rounded-lg px-2 py-1" value={u.role || "viewer"} onChange={(e) => updateRole(u.id, e.target.value)} disabled={isCurrentUser}>
+                          {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                        </select>
+                        {!isCurrentUser && <button onClick={() => removeUser(u.id)} className="text-red-400">🗑️</button>}
+                      </div>
+                    )}
+                    <span className={`text-gray-400 text-sm transition-transform ${expanded ? "rotate-180" : ""}`}>▼</span>
+                  </div>
                 </div>
-                {isAdmin && (
-                  <div className="flex gap-1 flex-shrink-0">
-                    <select className="text-xs border border-gray-200 rounded-lg px-2 py-1" value={u.role || "viewer"} onChange={(e) => updateRole(u.id, e.target.value)} disabled={u.id === user?.uid}>
-                      {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                    </select>
-                    {u.id !== user?.uid && <button onClick={() => removeUser(u.id)} className="text-red-400">🗑️</button>}
+
+                {/* Event Assignment */}
+                {expanded && !isSuperAdmin && (
+                  <div className="border-t border-gray-100 p-3 bg-gray-50/50 space-y-2">
+                    <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider mb-2">🎪 Event Access</p>
+                    {events.length === 0 ? (
+                      <p className="text-xs text-gray-500">No events created yet</p>
+                    ) : events.map(evt => {
+                      const currentRole = u.eventRoles?.[evt.id]?.role || "none";
+                      const currentDept = u.eventRoles?.[evt.id]?.departmentId || "";
+                      const evtDepts = allDepts[evt.id] || [];
+                      return (
+                        <div key={evt.id} className="bg-white rounded-xl border border-gray-200 p-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs font-bold text-gray-700">🎪 {evt.festivalName}</p>
+                            <p className="text-[10px] text-gray-500">📍 {evt.location}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1">
+                            <select
+                              className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1"
+                              value={currentRole}
+                              onChange={(e) => setEventRole(u.id, evt.id, e.target.value, currentDept)}
+                              disabled={isCurrentUser}
+                            >
+                              <option value="none">-- No Access --</option>
+                              {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                            </select>
+                            <select
+                              className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 disabled:opacity-50"
+                              value={currentDept}
+                              onChange={(e) => setEventRole(u.id, evt.id, currentRole, e.target.value)}
+                              disabled={currentRole === "none"}
+                            >
+                              <option value="">-- Any Dept --</option>
+                              {evtDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

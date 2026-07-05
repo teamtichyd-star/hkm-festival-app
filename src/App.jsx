@@ -22,19 +22,34 @@ function Dashboard() {
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { userData } = useAuth();
+
+  const isSuperAdmin = userData?.globalRole === "superadmin" || userData?.role === "admin";
 
   useEffect(() => {
     const q = query(collection(db, "events"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
-      const evts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setEvents(evts);
-      if (!selectedEventId && evts.length > 0) {
-        setSelectedEventId(evts[0].id);
-        setSelectedEvent(evts[0]);
+      const allEvents = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Super admin sees all events
+      // Others only see events they're assigned to
+      let accessibleEvents = [];
+
+      if (isSuperAdmin) {
+        accessibleEvents = allEvents;
+      } else {
+        const userEventRoles = userData?.eventRoles || {};
+        accessibleEvents = allEvents.filter(e => userEventRoles[e.id]);
+      }
+
+      setEvents(accessibleEvents);
+      if (!selectedEventId && accessibleEvents.length > 0) {
+        setSelectedEventId(accessibleEvents[0].id);
+        setSelectedEvent(accessibleEvents[0]);
       }
     });
     return () => unsub();
-  }, []);
+  }, [userData, isSuperAdmin]);
 
   useEffect(() => {
     if (selectedEventId && events.length > 0) {
@@ -45,10 +60,13 @@ function Dashboard() {
 
   const renderTab = () => {
     if (!selectedEventId && activeTab !== "users") return (
-      <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+      <div className="flex flex-col items-center justify-center py-20 text-gray-400 px-4">
         <span className="text-5xl mb-4">🎪</span>
-        <p className="text-lg font-semibold">No event selected</p>
-        <p className="text-sm">Click "+ New Event" in sidebar</p>
+        <p className="text-lg font-semibold">No event assigned yet</p>
+        <p className="text-sm text-center">You don't have access to any events.<br/>Contact admin (Hari Bhajana Dasa) to get assigned.</p>
+        {isSuperAdmin && (
+          <p className="text-xs text-orange-500 mt-4 text-center">💡 As admin, create an event from sidebar</p>
+        )}
       </div>
     );
     switch (activeTab) {
