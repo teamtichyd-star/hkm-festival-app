@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
+import PendingApproval from "./pages/PendingApproval";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import MobileNav from "./components/MobileNav";
@@ -91,8 +92,10 @@ function Dashboard() {
 }
 
 function AuthWrapper() {
-  const { user } = useAuth();
-  return user ? <Dashboard /> : <Login />;
+  const { user, userStatus } = useAuth();
+  if (!user) return <Login />;
+  if (userStatus === "pending" || userStatus === "rejected") return <PendingApproval />;
+  return <Dashboard />;
 }
 
 export default function App() {
