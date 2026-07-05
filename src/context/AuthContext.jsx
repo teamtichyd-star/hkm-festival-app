@@ -9,10 +9,10 @@ const SUPER_ADMIN_EMAIL = "teamtic.hyd@gmail.com";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [userRole, setUserRole] = useState(null);
-  const [userDept, setUserDept] = useState(null);
+  const [userData, setUserData] = useState(null);
   const [userStatus, setUserStatus] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [currentEventId, setCurrentEventId] = useState(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -21,53 +21,55 @@ export function AuthProvider({ children }) {
         const snap = await getDoc(ref);
 
         if (!snap.exists()) {
-          // First time login - check pre-registration
+          // Check pre-registration
           const preRegQuery = query(
             collection(db, "preRegistered"),
             where("email", "==", firebaseUser.email.toLowerCase())
           );
           const preRegSnap = await getDocs(preRegQuery);
 
-          let role = "pending";
-          let departmentId = null;
+          let eventRoles = {};
           let status = "pending";
+          let globalRole = "pending";
 
-          // Super admin always gets admin role
           if (firebaseUser.email === SUPER_ADMIN_EMAIL) {
-            role = "admin";
+            globalRole = "superadmin";
             status = "approved";
           } else if (!preRegSnap.empty) {
-            // Pre-registered user - auto approve
             const preReg = preRegSnap.docs[0].data();
-            role = preReg.role || "viewer";
-            departmentId = preReg.departmentId || null;
             status = "approved";
+            if (preReg.eventId) {
+              eventRoles[preReg.eventId] = {
+                role: preReg.role || "viewer",
+                departmentId: preReg.departmentId || null,
+              };
+            } else {
+              globalRole = preReg.role || "viewer";
+            }
             await deleteDoc(preRegSnap.docs[0].ref);
           }
 
-          await setDoc(ref, {
+          const userDoc = {
             name: firebaseUser.displayName,
             email: firebaseUser.email,
             photoURL: firebaseUser.photoURL,
-            role: role,
-            departmentId: departmentId,
+            globalRole: globalRole,
+            eventRoles: eventRoles,
             status: status,
             createdAt: new Date(),
-          });
-          setUserRole(role);
-          setUserDept(departmentId);
+          };
+          await setDoc(ref, userDoc);
+          setUserData(userDoc);
           setUserStatus(status);
         } else {
           const data = snap.data();
-          setUserRole(data.role);
-          setUserDept(data.departmentId);
+          setUserData(data);
           setUserStatus(data.status || "approved");
         }
         setUser(firebaseUser);
       } else {
         setUser(null);
-        setUserRole(null);
-        setUserDept(null);
+        setUserData(null);
         setUserStatus(null);
       }
       setLoading(false);
@@ -78,8 +80,36 @@ export function AuthProvider({ children }) {
   const login = () => signInWithPopup(auth, provider);
   const logout = () => signOut(auth);
 
+  // Get role for current event
+  const getRoleForEvent = (eventId) => {
+    if (!userData) return null;
+    if (userData.globalRole === "superadmin") return "admin";
+    if (!eventId) return userData.globalRole;
+    if (userData.eventRoles && userData.eventRoles[eventId]) {
+      return userData.eventRoles[eventId].role;
+    }
+    return userData.globalRole || "viewer";
+  };
+
+  const getDeptForEvent = (eventId) => {
+    if (!userData || !eventId) return null;
+    if (userData.eventRoles && userData.eventRoles[eventId]) {
+      return userData.eventRoles[eventId].departmentId;
+    }
+    return null;
+  };
+
+  // Current event's role & dept
+  const userRole = currentEventId ? getRoleForEvent(currentEventId) : (userData?.globalRole || "viewer");
+  const userDept = currentEventId ? getDeptForEvent(currentEventId) : null;
+
   return (
-    <AuthContext.Provider value={{ user, userRole, userDept, userStatus, login, logout, loading }}>
+    <AuthContext.Provider value={{
+      user, userData, userRole, userDept, userStatus,
+      login, logout, loading,
+      currentEventId, setCurrentEventId,
+      getRoleForEvent, getDeptForEvent,
+    }}>
       {!loading && children}
     </AuthContext.Provider>
   );

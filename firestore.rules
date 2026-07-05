@@ -1,8 +1,66 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isApproved() {
+      return isAuth() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == "approved";
+    }
+
+    function isSuperAdmin() {
+      return isApproved() &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.globalRole == "superadmin";
+    }
+
+    function hasEventAccess(eventId) {
+      return isApproved() &&
+             (isSuperAdmin() ||
+              (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.eventRoles != null &&
+               eventId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.eventRoles));
+    }
+
+    function canEditEvent(eventId) {
+      return isApproved() &&
+             (isSuperAdmin() ||
+              (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.eventRoles != null &&
+               eventId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.eventRoles &&
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.eventRoles[eventId].role in ["admin", "spoc", "hod"]));
+    }
+
+    function isEventAdmin(eventId) {
+      return isApproved() &&
+             (isSuperAdmin() ||
+              (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.eventRoles != null &&
+               eventId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.eventRoles &&
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.eventRoles[eventId].role == "admin"));
+    }
+
+    match /users/{userId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && request.auth.uid == userId;
+      allow update: if isSuperAdmin() || request.auth.uid == userId;
+      allow delete: if isSuperAdmin();
+    }
+
+    match /preRegistered/{docId} {
+      allow read: if isAuth();
+      allow create, delete, update: if isSuperAdmin();
+    }
+
+    match /events/{eventId} {
+      allow read: if hasEventAccess(eventId);
+      allow create: if isApproved();
+      allow update, delete: if isEventAdmin(eventId);
+
+      match /{document=**} {
+        allow read: if hasEventAccess(eventId);
+        allow write: if canEditEvent(eventId);
+      }
     }
   }
 }
