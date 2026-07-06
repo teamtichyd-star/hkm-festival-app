@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { db } from "../../firebase";
-import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, deleteDoc, doc, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs, writeBatch } from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
 
 const GROQ_KEY = "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";
@@ -34,18 +34,26 @@ export default function Prasadam({ eventId }) {
       if (s.exists()) setCounts(s.data());
     });
 
-    return () => { u1(); u2(); u3(); };
+    // Load saved AI estimates
+    const u4 = onSnapshot(query(collection(db, "events", eventId, "prasadam_ai_estimates"), orderBy("order", "asc")), s => {
+      if (!s.empty) setAiEstimates(s.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => { u1(); u2(); u3(); u4(); };
   }, [eventId]);
 
   const saveCounts = async (field, value) => {
     const ref = doc(db, "events", eventId, "prasadam_config", "counts");
-    await updateDoc(ref, { [field]: value }).catch(() =>
-      addDoc(collection(db, "events", eventId, "prasadam_config"), { [field]: value })
-    );
+    try {
+      await updateDoc(ref, { [field]: value });
+    } catch {
+      const colRef = collection(db, "events", eventId, "prasadam_config");
+      await addDoc(colRef, { [field]: value });
+    }
     setCounts(prev => ({ ...prev, [field]: value }));
   };
 
-  const totalMaha = (parseInt(counts.adultCount) || 0) + (parseInt(counts.childCount) || 0);
+  const totalMaha = (parseInt(counts.adultCount) || 0) + Math.ceil((parseInt(counts.childCount) || 0) / 2);
   const totalDonna = donnaItems.reduce((s, i) => s + (parseInt(i.count) || 0), 0);
 
   // Maha Items
@@ -116,7 +124,22 @@ Include:
       });
       const data = await res.json();
       const parsed = JSON.parse(data.choices[0].message.content);
-      setAiEstimates(parsed.estimates || []);
+      const estimates = parsed.estimates || [];
+
+      // Delete old estimates first
+      const oldSnap = await getDocs(collection(db, "events", eventId, "prasadam_ai_estimates"));
+      const batch = writeBatch(db);
+      oldSnap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+
+      // Save new estimates
+      for (let i = 0; i < estimates.length; i++) {
+        await addDoc(collection(db, "events", eventId, "prasadam_ai_estimates"), { ...estimates[i], order: i });
+      }
+
+      setAiEstimates(estimates);
+      setAddedIds(new Set());
+      setRejectedIds(new Set());
     } catch (e) { alert("AI Error: " + e.message); }
     setAiLoading(false);
   };
@@ -181,12 +204,12 @@ Include:
                   value={counts.adultCount || ""} onChange={e => saveCounts("adultCount", e.target.value)} placeholder="0" />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Children</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Children (x0.5)</label>
                 <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold text-center"
                   value={counts.childCount || ""} onChange={e => saveCounts("childCount", e.target.value)} placeholder="0" />
               </div>
               <div className="bg-orange-50 rounded-xl p-2 text-center">
-                <p className="text-[10px] font-bold text-orange-400 uppercase">Total</p>
+                <p className="text-[10px] font-bold text-orange-400 uppercase">Total (A + C/2)</p>
                 <p className="text-2xl font-extrabold text-orange-600">{totalMaha}</p>
               </div>
             </div>
