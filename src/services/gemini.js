@@ -1,4 +1,4 @@
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const GROQ_API_KEY = "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";
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 
 const groq = async (prompt, jsonMode = false) => {
