@@ -5,13 +5,13 @@ import { useAuth } from "../../context/AuthContext";
 import { shareToWhatsApp, sendWhatsAppTo } from "../../utils/whatsapp";
 
 const DEPT_CATEGORIES = {
-  "🎯 Coordination": ["Overall Coordinator", "Facilities Team", "Lakshmi Seva (Donations)"],
-  "🛕 Deities & Ratha": ["Deities", "Ratha Arrangement", "Decoration of Ratha and Deities", "Flower Decoration"],
-  "🍛 Prasadam": ["Cooking (Prasadam Kitchen)", "Main Prasadam Distribution", "Dhonna Prasadam Distribution", "Water for Ratha Yatra", "Water at Lunch Menu"],
-  "🎁 VIP & Guests": ["Bahumana for VIPs", "Inviting Devotees"],
-  "📿 Spiritual": ["Mantra Cards Distribution", "Kirtan Team", "Ratha Pulling", "Rangoli", "Books Distribution", "Applying Tilak"],
-  "🎪 Cultural & Support": ["Local People Engagement", "Sweeping / Cleaning in Front", "Flags", "Speakers (Sound)", "Kolatam Teams"],
-  "🔒 Logistics & Safety": ["Security and Crowd Control", "Medical and First Aid", "Permissions (Police/Municipal)", "Parking Management", "Photography and Videography", "Overall Sanitation"],
+  "Coordination": ["Overall Coordinator", "Facilities Team", "Lakshmi Seva (Donations)"],
+  "Deities & Ratha": ["Deities", "Ratha Arrangement", "Decoration of Ratha and Deities", "Flower Decoration"],
+  "Prasadam": ["Cooking (Prasadam Kitchen)", "Main Prasadam Distribution", "Dhonna Prasadam Distribution", "Water for Ratha Yatra", "Water at Lunch Menu"],
+  "VIP & Guests": ["Bahumana for VIPs", "Inviting Devotees"],
+  "Spiritual": ["Mantra Cards Distribution", "Kirtan Team", "Ratha Pulling", "Rangoli", "Books Distribution", "Applying Tilak"],
+  "Cultural & Support": ["Local People Engagement", "Sweeping / Cleaning in Front", "Flags", "Speakers (Sound)", "Kolatam Teams"],
+  "Logistics & Safety": ["Security and Crowd Control", "Medical and First Aid", "Permissions (Police/Municipal)", "Parking Management", "Photography and Videography", "Overall Sanitation"],
 };
 
 export default function Departments({ eventId }) {
@@ -53,7 +53,6 @@ export default function Departments({ eventId }) {
     updateDoc(doc(db, "events", eventId, "departments", id), { [field]: value });
   };
 
-  // When HOD email selected, auto-fill name and phone
   const selectHodFromUsers = (deptId, userEmail) => {
     if (!userEmail) {
       updateDoc(doc(db, "events", eventId, "departments", deptId), { hodEmail: "" });
@@ -69,7 +68,6 @@ export default function Departments({ eventId }) {
     }
   };
 
-  // Toggle team member
   const toggleTeamMember = (dept, userEmail) => {
     const teamEmails = dept.teamEmails || [];
     const user = users.find(u => u.email === userEmail);
@@ -119,32 +117,57 @@ export default function Departments({ eventId }) {
     }
     if (!placed) uncategorized.push(d);
   });
-  if (uncategorized.length > 0) groupedDepts["📁 Other"] = uncategorized;
+  if (uncategorized.length > 0) groupedDepts["Other"] = uncategorized;
 
   const toggleGroup = (cat) => setCollapsedGroups(prev => ({ ...prev, [cat]: !prev[cat] }));
 
+  // CLEAN WHATSAPP MESSAGE - All Departments
   const shareAllToWhatsApp = () => {
-    let text = `🪔 *Seva Departments*\n\n`;
-    depts.forEach((d, i) => {
-      text += `${i + 1}. *${d.name}*\n`;
-      if (d.hod) text += `   👤 HOD: ${d.hod}\n`;
-      if (d.contact) text += `   📞 ${d.contact}\n`;
-      if (d.team) text += `   👥 Team: ${d.team}\n`;
-      if (d.budget > 0) text += `   💰 ₹${d.budget.toLocaleString()}\n`;
-      text += `\n`;
+    let text = `*SEVA DEPARTMENTS LIST*\n`;
+    text += `━━━━━━━━━━━━━━━━\n\n`;
+
+    Object.entries(groupedDepts).forEach(([cat, catDepts]) => {
+      text += `*${cat.toUpperCase()}*\n`;
+      text += `━━━━━━━━━━━━━━━━\n\n`;
+      catDepts.forEach((d, i) => {
+        text += `${i + 1}. *${d.name}*\n`;
+        if (d.hod) text += `   HOD: ${d.hod}\n`;
+        if (d.contact) text += `   Phone: ${d.contact}\n`;
+        if (d.team) text += `   Team: ${d.team}\n`;
+        if (d.budget > 0) text += `   Budget: Rs. ${d.budget.toLocaleString()}\n`;
+        text += `\n`;
+      });
     });
-    text += `\n_Total Budget: ₹${totalBudget.toLocaleString()}_`;
+
+    text += `━━━━━━━━━━━━━━━━\n`;
+    text += `*SUMMARY*\n`;
+    text += `Total Departments: ${depts.length}\n`;
+    text += `HOD Assigned: ${withHOD}\n`;
+    text += `HOD Missing: ${missingHOD}\n`;
+    text += `Total Budget: Rs. ${totalBudget.toLocaleString()}`;
+
     shareToWhatsApp(text);
   };
 
+  // CLEAN WHATSAPP MESSAGE - Single Department
   const shareOneToWhatsApp = (dept) => {
-    let text = `🪔 *${dept.name}*\n\n`;
-    if (dept.hod) text += `👤 HOD: ${dept.hod}\n`;
-    if (dept.contact) text += `📞 ${dept.contact}\n`;
-    if (dept.team) text += `👥 Team: ${dept.team}\n`;
-    if (dept.responsibility) text += `📋 ${dept.responsibility}\n`;
-    if (dept.budget > 0) text += `💰 ₹${dept.budget.toLocaleString()}\n`;
+    let text = `*${dept.name.toUpperCase()}*\n`;
+    text += `━━━━━━━━━━━━━━━━\n\n`;
+    if (dept.hod) text += `HOD: ${dept.hod}\n`;
+    if (dept.contact) text += `Phone: ${dept.contact}\n`;
+    if (dept.team) text += `Team: ${dept.team}\n\n`;
+    if (dept.responsibility) {
+      text += `*Duty:*\n${dept.responsibility}\n\n`;
+    }
+    if (dept.budget > 0) text += `Budget: Rs. ${dept.budget.toLocaleString()}`;
+
     shareToWhatsApp(text);
+  };
+
+  const contactHOD = (dept) => {
+    if (!dept.contact) return alert("No contact number set");
+    const text = `Hare Krishna ${dept.hod}!\n\nRegarding *${dept.name}* seva.\n\nPlease let me know if you need any support.`;
+    sendWhatsAppTo(dept.contact, text);
   };
 
   return (
@@ -152,25 +175,25 @@ export default function Departments({ eventId }) {
       <div className="sticky top-0 bg-gray-50 z-10 pb-2 -mx-4 px-4 pt-2 border-b border-gray-100">
         <div className="flex justify-between items-center mb-3">
           <div>
-            <h2 className="text-lg font-bold text-gray-800">🏛️ Seva Departments</h2>
-            <p className="text-[10px] text-gray-500">{filteredDepts.length}/{depts.length} · ₹{totalBudget.toLocaleString()} · {approvedUsers.length} users available</p>
+            <h2 className="text-lg font-bold text-gray-800">Seva Departments</h2>
+            <p className="text-[10px] text-gray-500">{filteredDepts.length}/{depts.length} · Rs. {totalBudget.toLocaleString()} · {approvedUsers.length} users</p>
           </div>
           <div className="flex gap-1">
-            <button onClick={shareAllToWhatsApp} className="bg-green-500 text-white p-2 rounded-lg text-xs shadow">💬</button>
-            <button onClick={() => setCompact(!compact)} className="bg-gray-100 text-gray-600 p-2 rounded-lg text-xs">{compact ? "📋" : "📄"}</button>
+            <button onClick={shareAllToWhatsApp} className="bg-green-500 text-white p-2 rounded-lg text-xs shadow" title="Share All">Share</button>
+            <button onClick={() => setCompact(!compact)} className="bg-gray-100 text-gray-600 p-2 rounded-lg text-xs">{compact ? "Full" : "Compact"}</button>
             {canEdit && <button onClick={addDept} className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white px-3 py-2 rounded-lg text-xs font-bold shadow">+ Add</button>}
           </div>
         </div>
 
-        <input type="text" placeholder="🔍 Search..." value={search} onChange={(e) => setSearch(e.target.value)}
+        <input type="text" placeholder="Search departments..." value={search} onChange={(e) => setSearch(e.target.value)}
           className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-300 focus:outline-none bg-white" />
 
         <div className="flex gap-1 mt-2 overflow-x-auto scrollbar-hide">
           {[
             { id: "all", label: `All (${depts.length})`, color: "bg-gray-100 text-gray-700" },
-            { id: "hod", label: `✅ HOD (${withHOD})`, color: "bg-green-100 text-green-700" },
-            { id: "missing", label: `⚠️ Missing (${missingHOD})`, color: "bg-red-100 text-red-700" },
-            { id: "budget", label: `💰 Budget`, color: "bg-blue-100 text-blue-700" },
+            { id: "hod", label: `HOD Set (${withHOD})`, color: "bg-green-100 text-green-700" },
+            { id: "missing", label: `Missing HOD (${missingHOD})`, color: "bg-red-100 text-red-700" },
+            { id: "budget", label: `Has Budget`, color: "bg-blue-100 text-blue-700" },
           ].map(f => (
             <button key={f.id} onClick={() => setFilter(f.id)}
               className={`flex-shrink-0 text-[11px] font-semibold px-3 py-1 rounded-full transition-all ${filter === f.id ? "ring-2 ring-orange-400 " + f.color : f.color + " opacity-70"}`}>
@@ -197,7 +220,7 @@ export default function Departments({ eventId }) {
                   <span className="text-xs bg-orange-100 text-orange-600 w-6 h-6 rounded-lg flex items-center justify-center font-bold flex-shrink-0">{index + 1}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-gray-800 truncate">{dept.name}</p>
-                    <p className="text-[10px] text-gray-500 truncate">{dept.hod ? "👤 " + dept.hod : "⚠️ HOD Needed"}{dept.budget > 0 && " · ₹" + dept.budget.toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500 truncate">{dept.hod ? "HOD: " + dept.hod : "HOD needed"}{dept.budget > 0 && " · Rs. " + dept.budget.toLocaleString()}</p>
                   </div>
                   <button onClick={() => setExpandedId(expandedId === dept.id ? null : dept.id)} className="text-orange-500 text-xs font-bold">Edit</button>
                 </div>
@@ -210,12 +233,12 @@ export default function Departments({ eventId }) {
                         <h3 className="font-bold text-gray-800 text-sm truncate">{dept.name}</h3>
                         <div className="flex flex-wrap items-center gap-1 mt-1">
                           {dept.hod ? (
-                            <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">👤 {dept.hod}</span>
+                            <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">HOD: {dept.hod}</span>
                           ) : (
-                            <span className="text-[10px] bg-red-100 text-red-500 px-2 py-0.5 rounded-full font-medium">⚠️ HOD Needed</span>
+                            <span className="text-[10px] bg-red-100 text-red-500 px-2 py-0.5 rounded-full font-medium">HOD Needed</span>
                           )}
-                          {dept.contact && <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full">📞 {dept.contact}</span>}
-                          {dept.budget > 0 && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-mono font-bold">₹{dept.budget.toLocaleString()}</span>}
+                          {dept.contact && <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full">Ph: {dept.contact}</span>}
+                          {dept.budget > 0 && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-mono font-bold">Rs. {dept.budget.toLocaleString()}</span>}
                         </div>
                       </div>
                     </div>
@@ -232,10 +255,9 @@ export default function Departments({ eventId }) {
                       value={dept.name} onChange={(e) => updateDept(dept.id, "name", e.target.value)} />
                   </div>
 
-                  {/* HOD SELECTION - PROMINENT */}
                   <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-3">
-                    <label className="text-[10px] uppercase text-blue-700 font-bold flex items-center gap-1">
-                      👤 Select HOD from Users ({approvedUsers.length} available)
+                    <label className="text-[10px] uppercase text-blue-700 font-bold">
+                      Select HOD from Users ({approvedUsers.length} available)
                     </label>
                     <select
                       className="w-full mt-1 bg-white border border-blue-300 rounded-lg px-2 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
@@ -245,13 +267,10 @@ export default function Departments({ eventId }) {
                       <option value="">-- Select a User (or type below) --</option>
                       {approvedUsers.map(u => (
                         <option key={u.id} value={u.email}>
-                          {u.name || u.email} {u.phone && `(📞 ${u.phone})`}
+                          {u.name || u.email} {u.phone && `(${u.phone})`}
                         </option>
                       ))}
                     </select>
-                    {dept.hodEmail && (
-                      <p className="text-[10px] text-blue-600 mt-1">✓ Selected: {dept.hodEmail}</p>
-                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -266,32 +285,30 @@ export default function Departments({ eventId }) {
                         <input className="flex-1 bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-orange-300 focus:outline-none"
                           value={dept.contact} onChange={(e) => updateDept(dept.id, "contact", e.target.value)} placeholder="Phone..." />
                         {dept.contact && (
-                          <button onClick={() => sendWhatsAppTo(dept.contact, `Hare Krishna ${dept.hod}! Regarding ${dept.name}...`)} className="bg-green-500 text-white px-2 rounded-lg text-xs">💬</button>
+                          <button onClick={() => contactHOD(dept)} className="bg-green-500 text-white px-3 rounded-lg text-xs font-bold">WA</button>
                         )}
                       </div>
                     </div>
                     <div className="md:col-span-2">
-                      <label className="text-[9px] uppercase text-gray-400 font-bold">Budget (₹)</label>
+                      <label className="text-[9px] uppercase text-gray-400 font-bold">Budget (Rs.)</label>
                       <input type="number" className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-mono font-bold text-orange-600 focus:ring-2 focus:ring-orange-300 focus:outline-none"
                         value={dept.budget} onChange={(e) => updateDept(dept.id, "budget", Number(e.target.value))} />
                     </div>
                   </div>
 
-                  {/* TEAM MEMBERS - USER PICKER */}
                   <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-3">
                     <div className="flex justify-between items-center mb-2">
-                      <label className="text-[10px] uppercase text-purple-700 font-bold flex items-center gap-1">
-                        👥 Team Members ({(dept.teamEmails || []).length} selected)
+                      <label className="text-[10px] uppercase text-purple-700 font-bold">
+                        Team Members ({(dept.teamEmails || []).length} selected)
                       </label>
                       <button
                         onClick={() => setTeamPickerOpen(teamPickerOpen === dept.id ? null : dept.id)}
                         className="text-xs bg-purple-500 text-white px-3 py-1 rounded-lg font-bold"
                       >
-                        {teamPickerOpen === dept.id ? "Done" : "+ Add Members"}
+                        {teamPickerOpen === dept.id ? "Done" : "+ Add"}
                       </button>
                     </div>
 
-                    {/* User Picker Dropdown */}
                     {teamPickerOpen === dept.id && (
                       <div className="bg-white border border-purple-200 rounded-lg max-h-64 overflow-y-auto p-2 mb-2">
                         <input
@@ -326,7 +343,7 @@ export default function Departments({ eventId }) {
                                 />
                                 <div className="flex-1 min-w-0">
                                   <p className="font-semibold truncate">{u.name || "Unknown"}</p>
-                                  <p className="text-[9px] text-gray-400 truncate">{u.email}{u.phone && ` · 📞 ${u.phone}`}</p>
+                                  <p className="text-[9px] text-gray-400 truncate">{u.email}{u.phone && ` · ${u.phone}`}</p>
                                 </div>
                                 {isHod && <span className="text-[9px] bg-blue-100 text-blue-700 px-1 rounded">HOD</span>}
                               </label>
@@ -336,7 +353,6 @@ export default function Departments({ eventId }) {
                       </div>
                     )}
 
-                    {/* Selected Team as Chips */}
                     {(dept.teamEmails || []).length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {(dept.teamEmails || []).map(email => {
@@ -345,18 +361,17 @@ export default function Departments({ eventId }) {
                           return (
                             <div key={email} className="flex items-center gap-1 bg-white border border-purple-200 rounded-full pl-2 pr-1 py-0.5">
                               <span className="text-[10px] font-medium">{u.name || u.email}</span>
-                              <button onClick={() => toggleTeamMember(dept, email)} className="w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500 text-[9px] flex items-center justify-center">✕</button>
+                              <button onClick={() => toggleTeamMember(dept, email)} className="w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-500 text-[9px] flex items-center justify-center">x</button>
                             </div>
                           );
                         })}
                       </div>
                     )}
 
-                    {/* Manual Text Input as Fallback */}
                     <div className="mt-2">
                       <label className="text-[9px] uppercase text-gray-400 font-bold">Or type manually (comma separated):</label>
                       <input className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-orange-300 focus:outline-none"
-                        value={dept.team} onChange={(e) => updateDept(dept.id, "team", e.target.value)} placeholder="Add names not in user list..." />
+                        value={dept.team} onChange={(e) => updateDept(dept.id, "team", e.target.value)} placeholder="Add names..." />
                     </div>
                   </div>
 
@@ -367,8 +382,13 @@ export default function Departments({ eventId }) {
                   </div>
 
                   <div className="flex justify-between items-center pt-2">
-                    <button onClick={() => shareOneToWhatsApp(dept)} className="text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg font-bold">💬 Share</button>
-                    <button onClick={() => deleteDept(dept.id)} className="text-[11px] text-red-400 hover:text-red-600 px-3 py-1.5 rounded-lg">🗑️ Delete</button>
+                    <div className="flex gap-1">
+                      <button onClick={() => shareOneToWhatsApp(dept)} className="text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg font-bold">Share on WA</button>
+                      {dept.contact && (
+                        <button onClick={() => contactHOD(dept)} className="text-xs bg-blue-500 text-white px-3 py-1.5 rounded-lg font-bold">Contact HOD</button>
+                      )}
+                    </div>
+                    <button onClick={() => deleteDept(dept.id)} className="text-[11px] text-red-400 hover:text-red-600 px-3 py-1.5 rounded-lg">Delete</button>
                   </div>
                 </div>
               )}
