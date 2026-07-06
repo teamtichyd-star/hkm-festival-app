@@ -1,6 +1,7 @@
 import { useAuth } from "../context/AuthContext";
 
 const tabs = [
+  { id: "dashboard", icon: "🏠", label: "Home" },
   { id: "departments", icon: "🏛️", label: "Depts" },
   { id: "tasks", icon: "✅", label: "Tasks" },
   { id: "requirements", icon: "📋", label: "Reqs" },

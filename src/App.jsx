@@ -5,6 +5,7 @@ import PendingApproval from "./pages/PendingApproval";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import MobileNav from "./components/MobileNav";
+import DashboardTab from "./components/Dashboard";
 import Departments from "./pages/tabs/Departments";
 import Tasks from "./pages/tabs/Tasks";
 import Requirements from "./pages/tabs/Requirements";
@@ -16,8 +17,8 @@ import Users from "./pages/tabs/Users";
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { db } from "./firebase";
 
-function Dashboard() {
-  const [activeTab, setActiveTab] = useState("departments");
+function AppLayout() {
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [events, setEvents] = useState([]);
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -30,18 +31,13 @@ function Dashboard() {
     const q = query(collection(db, "events"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       const allEvents = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      // Super admin sees all events
-      // Others only see events they're assigned to
       let accessibleEvents = [];
-
       if (isSuperAdmin) {
         accessibleEvents = allEvents;
       } else {
         const userEventRoles = userData?.eventRoles || {};
         accessibleEvents = allEvents.filter(e => userEventRoles[e.id]);
       }
-
       setEvents(accessibleEvents);
       if (!selectedEventId && accessibleEvents.length > 0) {
         setSelectedEventId(accessibleEvents[0].id);
@@ -65,20 +61,21 @@ function Dashboard() {
         <p className="text-lg font-semibold">No event assigned yet</p>
         <p className="text-sm text-center">You don't have access to any events.<br/>Contact admin (Hari Bhajana Dasa) to get assigned.</p>
         {isSuperAdmin && (
-          <p className="text-xs text-orange-500 mt-4 text-center">💡 As admin, create an event from sidebar</p>
+          <p className="text-xs text-orange-500 mt-4 text-center">As admin, create an event from sidebar</p>
         )}
       </div>
     );
     switch (activeTab) {
-      case "departments": return <Departments eventId={selectedEventId} />;
-      case "tasks": return <Tasks eventId={selectedEventId} />;
+      case "dashboard":    return <DashboardTab currentEvent={selectedEvent} currentUser={userData} />;
+      case "departments":  return <Departments eventId={selectedEventId} />;
+      case "tasks":        return <Tasks eventId={selectedEventId} />;
       case "requirements": return <Requirements eventId={selectedEventId} />;
-      case "crowd": return <Crowd eventId={selectedEventId} event={selectedEvent} />;
-      case "prasadam": return <Prasadam eventId={selectedEventId} />;
-      case "etiquette": return <Etiquette eventId={selectedEventId} />;
-      case "donations": return <Donations eventId={selectedEventId} />;
-      case "users": return <Users eventId={selectedEventId} />;
-      default: return <Departments eventId={selectedEventId} />;
+      case "crowd":        return <Crowd eventId={selectedEventId} event={selectedEvent} />;
+      case "prasadam":     return <Prasadam eventId={selectedEventId} />;
+      case "etiquette":    return <Etiquette eventId={selectedEventId} />;
+      case "donations":    return <Donations eventId={selectedEventId} />;
+      case "users":        return <Users eventId={selectedEventId} />;
+      default:             return <DashboardTab currentEvent={selectedEvent} currentUser={userData} />;
     }
   };
 
@@ -110,7 +107,7 @@ function AuthWrapper() {
   const { user, userStatus } = useAuth();
   if (!user) return <Login />;
   if (userStatus === "pending" || userStatus === "rejected") return <PendingApproval />;
-  return <Dashboard />;
+  return <AppLayout />;
 }
 
 export default function App() {
