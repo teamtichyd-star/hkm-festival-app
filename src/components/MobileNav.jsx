@@ -9,6 +9,7 @@ const tabs = [
   { id: "prasadam", icon: "🍛", label: "Prasad" },
   { id: "etiquette", icon: "🙏", label: "Rules" },
   { id: "donations", icon: "💰", label: "Donate" },
+  { id: "ai", icon: "✨", label: "AI" },
   { id: "users", icon: "⚙️", label: "Users", adminOnly: true },
 ];
 

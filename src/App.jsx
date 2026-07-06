@@ -1,3 +1,4 @@
+import AIAssistant from "./pages/tabs/AIAssistant";
 import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
@@ -75,6 +76,7 @@ function AppLayout() {
       case "etiquette":    return <Etiquette eventId={selectedEventId} />;
       case "donations":    return <Donations eventId={selectedEventId} />;
       case "users":        return <Users eventId={selectedEventId} />;
+      case "ai":           return <AIAssistant eventId={selectedEventId} />;
       default:             return <DashboardTab currentEvent={selectedEvent} currentUser={userData} />;
     }
   };

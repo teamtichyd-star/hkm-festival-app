@@ -1,4 +1,3 @@
-import AIInsights from "./AIInsights";
 import { useState, useEffect } from "react";
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { db } from "../firebase";
@@ -457,16 +456,7 @@ const Dashboard = ({ currentEvent, currentUser }) => {
         </div>
       )}
 
-      {/* AI Insights */}
-      <AIInsights
-        eventName={eventName}
-        daysRemaining={days}
-        ts={ts}
-        ds={ds}
-        rs={rs}
-        dns={dns}
-        es={es}
-      />
+      
 
       {/* Overall Score */}
       <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-lg p-5 text-white">

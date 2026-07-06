@@ -13,6 +13,7 @@ const tabs = [
   { id: "etiquette", label: "Etiquette", icon: "🙏" },
   { id: "donations", label: "Donations", icon: "💰" },
   { id: "users", label: "User Management", icon: "👥" },
+  { id: "ai", label: "AI Assistant", icon: "✨" },
 ];
 
 const DEFAULT_DEPARTMENTS = [
