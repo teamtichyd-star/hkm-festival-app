@@ -128,54 +128,71 @@ Return JSON only:
       const recommended = aiData.recommendedVolunteers || 3;
       const shortage = Math.max(0, recommended - teamCount);
 
-      // We build the message ourselves - AI has no control over format
-      const lines = lang === "telugu" ? [
-        `హరే కృష్ణ ${hodName} గారు 🙏`,
-        "",
-        `*ఉత్సవం:* ${eventName}`,
-        `*విభాగం:* ${dept.name}`,
-        `*మిగిలిన రోజులు:* ${daysRemaining}`,
-        "",
-        `*పెండింగ్ పనులు:*`,
-        ...(pendingDeptTasks.length > 0
-          ? pendingDeptTasks.map(t => `• ${t.title}`)
-          : ["• పెండింగ్ పనులు లేవు"]),
-        "",
-        `*వాలంటీర్ బలం:*`,
-        `• అవసరం: ${recommended}`,
-        `• ప్రస్తుతం: ${teamCount}`,
-        ...(shortage > 0 ? [`• దయచేసి ${shortage} మంది వాలంటీర్లను జోడించండి`] : ["• బలం సరిపోతుంది ✅"]),
-        "",
-        `దయచేసి వీలైనంత త్వరగా చర్య తీసుకోండి.`,
-        "",
-        `హరే కృష్ణ`,
-        `— ${eventName}`,
-      ] : [
-        `Hare Krishna ${hodName} garu 🙏`,
-        "",
+      // Build clean message - no emojis, double line breaks for WhatsApp readability
+      const en = [
+        `Hare Krishna ${hodName} garu`,
+        ``,
         `*Event:* ${eventName}`,
         `*Department:* ${dept.name}`,
         `*Days Remaining:* ${daysRemaining}`,
-        "",
+        ``,
         `*Pending Tasks:*`,
         ...(pendingDeptTasks.length > 0
-          ? pendingDeptTasks.map(t => `• ${t.title}`)
-          : ["• No pending tasks ✅"]),
-        "",
+          ? pendingDeptTasks.map(t => `- ${t.title}`)
+          : [`- No pending tasks`]),
+        ``,
         `*Volunteer Strength:*`,
-        `• Required: ${recommended}`,
-        `• Current: ${teamCount}`,
-        ...(shortage > 0 ? [`• Please add ${shortage} more volunteers to this department`] : ["• Strength is sufficient ✅"]),
-        "",
+        `- Required: ${recommended}`,
+        `- Current: ${teamCount}`,
+        ...(shortage > 0
+          ? [`- Please add ${shortage} more volunteers to this department`]
+          : [`- Strength is sufficient`]),
+        ``,
         `Please review and take action at the earliest.`,
-        "",
+        ``,
         `Hare Krishna`,
-        `— ${eventName}`,
+        `-- ${eventName}`,
       ];
 
+      const te = [
+        `Hare Krishna ${hodName} garu`,
+        ``,
+        `*Utsavam:* ${eventName}`,
+        `*Vibhagam:* ${dept.name}`,
+        `*Migiliina Rojulu:* ${daysRemaining}`,
+        ``,
+        `*Pending Panulu:*`,
+        ...(pendingDeptTasks.length > 0
+          ? pendingDeptTasks.map(t => `- ${t.title}`)
+          : [`- Pending panulu levu`]),
+        ``,
+        `*Volunteer Balam:*`,
+        `- Avasaram: ${recommended}`,
+        `- Prustutam: ${teamCount}`,
+        ...(shortage > 0
+          ? [`- Dayachesi ${shortage} mandi volunteers ni add cheyandi`]
+          : [`- Balam saripotundi`]),
+        ``,
+        `Dayachesi veganga charyatisukoni.`,
+        ``,
+        `Hare Krishna`,
+        `-- ${eventName}`,
+      ];
+
+      const lines = lang === "telugu" ? te : en;
       const msg = lines.join("\n");
       const phone = hodPhone.replace(/\D/g, "");
-      window.open("https://wa.me/" + phone + "?text=" + encodeURIComponent(msg), "_blank");
+
+      // Try direct WhatsApp app first on mobile, fallback to wa.me
+      const waUrl = "https://wa.me/" + phone + "?text=" + encodeURIComponent(msg);
+      const appUrl = "whatsapp://send?phone=" + phone + "&text=" + encodeURIComponent(msg);
+      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        window.location.href = appUrl;
+        setTimeout(() => window.open(waUrl, "_blank"), 1500);
+      } else {
+        window.open(waUrl, "_blank");
+      }
     } catch (e) { alert(e.message); }
     setNudgeLoading(null);
   };
