@@ -210,6 +210,16 @@ export default function Sidebar({ activeTab, setActiveTab, events, selectedEvent
             </select>
           </div>
 
+          {/* AI Auto-Plan Button */}
+          {selectedEventId && currentEvent && (
+            <button
+              onClick={() => setShowAIPlanner(true)}
+              className="w-full mb-3 flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-xs font-semibold px-3 py-2 rounded-xl hover:opacity-90 transition-all"
+            >
+              ✨ AI Auto-Plan This Event
+            </button>
+          )}
+
           {/* Create Button Only (No Delete Here) */}
           {canManage && (
             <div className="mb-4">
