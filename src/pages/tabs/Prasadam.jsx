@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { db } from "../../firebase";
-import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs, writeBatch } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs, writeBatch, setDoc } from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
 
 const GROQ_KEY = "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";
@@ -44,12 +44,7 @@ export default function Prasadam({ eventId }) {
 
   const saveCounts = async (field, value) => {
     const ref = doc(db, "events", eventId, "prasadam_config", "counts");
-    try {
-      await updateDoc(ref, { [field]: value });
-    } catch {
-      const colRef = collection(db, "events", eventId, "prasadam_config");
-      await addDoc(colRef, { [field]: value });
-    }
+    await setDoc(ref, { [field]: value }, { merge: true });
     setCounts(prev => ({ ...prev, [field]: value }));
   };
 
