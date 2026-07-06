@@ -68,7 +68,7 @@ const Dashboard = ({ currentEvent, currentUser }) => {
     const total = tasks.length;
     const done = tasks.filter((t) => t.status === "Done").length;
     const inProgress = tasks.filter((t) => t.status === "In Progress").length;
-    const pending = tasks.filter((t) => t.status === "Pending" || !t.status).length;
+    const pending = tasks.filter((t) => !t.status || t.status === "Pending" || t.status === "Not Started" || t.status === "Blocked").length;
     const pct = total ? Math.round((done / total) * 100) : 0;
     const phases = {};
     tasks.forEach((t) => {
@@ -260,11 +260,6 @@ const Dashboard = ({ currentEvent, currentUser }) => {
             ))}
           </div>
         </div>
-      </div>
-
-      {/* Debug info - remove after confirming */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-800">
-        <strong>Debug:</strong> EventID: {eventId || "none"} | Depts: {departments.length} | Tasks: {tasks.length} | Reqs: {requirements.length} | Donors: {donations.length}
       </div>
 
       {/* Quick Actions */}

@@ -4,6 +4,7 @@ import { db } from "../firebase";
 import { doc, deleteDoc, collection, getDocs, addDoc, setDoc } from "firebase/firestore";
 
 const tabs = [
+  { id: "dashboard", label: "Dashboard", icon: "🏠" },
   { id: "departments", label: "Departments", icon: "🏛️" },
   { id: "tasks", label: "Task Tracker", icon: "✅" },
   { id: "requirements", label: "Requirements", icon: "📋" },
