@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, onSnapshot, addDoc, doc, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 import { useAuth } from "../../context/AuthContext";
 
@@ -149,6 +149,8 @@ Return JSON: {
   "requirements": [{"item":"","quantity":"","unit":"","department":"","status":"Pending","cost":0}],
   "depts": [{"name":"","responsibility":""}]
 }`;
+      // Save updated event details
+      await updateDoc(doc(db, "events", eventId), planForm);
       const res = await callGroq(prompt);
       setMissingItems(res);
       setView("missing");
