@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { db } from "../firebase";
 
 const Dashboard = ({ currentEvent, currentUser }) => {
@@ -11,29 +11,50 @@ const Dashboard = ({ currentEvent, currentUser }) => {
   const [crowd, setCrowd] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const eventId = currentEvent?.id;
+
   useEffect(() => {
-    if (!currentEvent?.id) return;
+    if (!eventId) {
+      setLoading(false);
+      setDepartments([]);
+      setTasks([]);
+      setRequirements([]);
+      setDonations([]);
+      setEtiquette([]);
+      setCrowd([]);
+      return;
+    }
+
     setLoading(true);
     const unsubs = [];
 
-    const listenTo = (col, setter) => {
-      const q = query(collection(db, col), where("eventId", "==", currentEvent.id));
-      const unsub = onSnapshot(q, (snap) => {
-        setter(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      });
-      unsubs.push(unsub);
+    const listenTo = (col, setter, orderField) => {
+      try {
+        const ref = collection(db, "events", eventId, col);
+        const q = orderField ? query(ref, orderBy(orderField, "asc")) : ref;
+        const unsub = onSnapshot(q, (snap) => {
+          setter(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        }, (err) => {
+          console.warn(col + " error:", err);
+          setter([]);
+        });
+        unsubs.push(unsub);
+      } catch(e) {
+        console.warn(col + " catch:", e);
+        setter([]);
+      }
     };
 
-    listenTo("departments", setDepartments);
-    listenTo("tasks", setTasks);
-    listenTo("requirements", setRequirements);
-    listenTo("donations", setDonations);
-    listenTo("etiquette", setEtiquette);
-    listenTo("crowd", setCrowd);
+    listenTo("departments", setDepartments, "order");
+    listenTo("tasks", setTasks, "order");
+    listenTo("requirements", setRequirements, null);
+    listenTo("donors", setDonations, null);
+    listenTo("etiquette", setEtiquette, "order");
+    listenTo("checkpoints", setCrowd, "order");
 
-    setTimeout(() => setLoading(false), 600);
+    setLoading(false);
     return () => unsubs.forEach((u) => u());
-  }, [currentEvent?.id]);
+  }, [eventId]);
 
   const daysRemaining = () => {
     if (!currentEvent?.date) return null;
@@ -61,7 +82,7 @@ const Dashboard = ({ currentEvent, currentUser }) => {
 
   const deptStats = () => {
     const total = departments.length;
-    const withHOD = departments.filter((d) => d.hodName && d.hodName.trim()).length;
+    const withHOD = departments.filter((d) => (d.hodName || d.hod || "").trim()).length;
     const missingHOD = total - withHOD;
     const totalBudget = departments.reduce((s, d) => s + (parseFloat(d.budget) || 0), 0);
     return { total, withHOD, missingHOD, totalBudget };
@@ -87,15 +108,14 @@ const Dashboard = ({ currentEvent, currentUser }) => {
 
   const etiquetteStats = () => {
     const total = etiquette.length;
-    const briefed = etiquette.filter((e) => e.briefed).length;
+    const briefed = etiquette.filter((e) => e.briefed || e.status === "Done").length;
     const pct = total ? Math.round((briefed / total) * 100) : 0;
     return { total, briefed, pct };
   };
 
   const crowdStats = () => {
-    const totalEstimate = crowd.reduce((s, c) => s + (parseFloat(c.estimate) || 0), 0);
-    const zones = crowd.length;
-    return { totalEstimate, zones };
+    const totalEstimate = crowd.reduce((s, c) => s + (parseFloat(c.estimate) || parseFloat(c.count) || 0), 0);
+    return { totalEstimate, zones: crowd.length };
   };
 
   const ts = taskStats();
@@ -106,17 +126,14 @@ const Dashboard = ({ currentEvent, currentUser }) => {
   const cs = crowdStats();
   const days = daysRemaining();
 
+  const eventName = currentEvent?.festivalName || currentEvent?.name || "Festival";
+
   const shareWhatsApp = () => {
     const lines = [];
-    lines.push("*" + (currentEvent?.name || "Festival") + " - Status Report*");
-    if (currentEvent?.date) {
-      lines.push("Date: " + new Date(currentEvent.date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }));
-    }
+    lines.push("*" + eventName + " - Status Report*");
+    if (currentEvent?.date) lines.push("Date: " + new Date(currentEvent.date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }));
     if (currentEvent?.location) lines.push("Location: " + currentEvent.location);
-    if (days !== null) {
-      const dayStr = days > 0 ? days + " days remaining" : days === 0 ? "TODAY!" : "Event Passed";
-      lines.push("Days: *" + dayStr + "*");
-    }
+    if (days !== null) lines.push("Days: *" + (days > 0 ? days + " days remaining" : days === 0 ? "TODAY!" : "Event Passed") + "*");
     lines.push("");
     lines.push("*Tasks:* " + ts.done + "/" + ts.total + " done (" + ts.pct + "%)");
     lines.push("  In Progress: " + ts.inProgress + " | Pending: " + ts.pending);
@@ -130,39 +147,28 @@ const Dashboard = ({ currentEvent, currentUser }) => {
     lines.push("");
     lines.push("*Donations:* Rs." + dns.received.toLocaleString("en-IN") + " received");
     lines.push("  Budget: Rs." + dns.totalBudget.toLocaleString("en-IN") + " | " + (dns.surplus >= 0 ? "Surplus" : "Deficit") + ": Rs." + Math.abs(dns.surplus).toLocaleString("en-IN"));
-    if (es.total > 0) {
-      lines.push("");
-      lines.push("*Etiquette Briefings:* " + es.briefed + "/" + es.total + " (" + es.pct + "%)");
-    }
-    if (cs.zones > 0) {
-      lines.push("");
-      lines.push("*Crowd Estimate:* " + cs.totalEstimate.toLocaleString("en-IN") + " across " + cs.zones + " zones");
-    }
-    lines.push("");
-    lines.push("_Shared from HKM Festival App_");
+    if (es.total > 0) { lines.push(""); lines.push("*Etiquette:* " + es.briefed + "/" + es.total + " (" + es.pct + "%)"); }
+    if (cs.zones > 0) { lines.push(""); lines.push("*Crowd Estimate:* " + cs.totalEstimate.toLocaleString("en-IN") + " across " + cs.zones + " zones"); }
+    lines.push(""); lines.push("_Shared from HKM Festival App_");
     window.open("https://wa.me/?text=" + encodeURIComponent(lines.join("\n")), "_blank");
   };
 
   const sharePendingWhatsApp = () => {
     const pendingTasks = tasks.filter((t) => t.status !== "Done");
     const pendingReqs = requirements.filter((r) => r.status !== "Arranged");
-    const missingDepts = departments.filter((d) => !d.hodName || !d.hodName.trim());
+    const missingDepts = departments.filter((d) => !(d.hodName || d.hod || "").trim());
     const lines = [];
-    lines.push("*" + (currentEvent?.name || "Festival") + " - Pending Items*");
+    lines.push("*" + eventName + " - Pending Items*");
     lines.push("");
     if (pendingTasks.length > 0) {
       lines.push("*Pending Tasks (" + pendingTasks.length + "):*");
-      pendingTasks.slice(0, 10).forEach((t) => {
-        lines.push("  - " + (t.title || t.task || "Task") + " [" + (t.status || "Pending") + "]");
-      });
+      pendingTasks.slice(0, 10).forEach((t) => lines.push("  - " + (t.title || t.task || "Task") + " [" + (t.status || "Pending") + "]"));
       if (pendingTasks.length > 10) lines.push("  ...and " + (pendingTasks.length - 10) + " more");
       lines.push("");
     }
     if (pendingReqs.length > 0) {
       lines.push("*Pending Requirements (" + pendingReqs.length + "):*");
-      pendingReqs.slice(0, 8).forEach((r) => {
-        lines.push("  - " + (r.item || r.name || "Item") + " [" + (r.status || "Pending") + "]");
-      });
+      pendingReqs.slice(0, 8).forEach((r) => lines.push("  - " + (r.item || r.name || "Item") + " [" + (r.status || "Pending") + "]"));
       if (pendingReqs.length > 8) lines.push("  ...and " + (pendingReqs.length - 8) + " more");
       lines.push("");
     }
@@ -171,19 +177,14 @@ const Dashboard = ({ currentEvent, currentUser }) => {
       missingDepts.forEach((d) => lines.push("  - " + d.name));
       lines.push("");
     }
-    if (pendingTasks.length === 0 && pendingReqs.length === 0 && missingDepts.length === 0) {
-      lines.push("All items completed!");
-    }
+    if (pendingTasks.length === 0 && pendingReqs.length === 0 && missingDepts.length === 0) lines.push("All items completed!");
     lines.push("_Shared from HKM Festival App_");
     window.open("https://wa.me/?text=" + encodeURIComponent(lines.join("\n")), "_blank");
   };
 
   const ProgressBar = ({ pct, color = "bg-orange-500", height = "h-3" }) => (
     <div className={"w-full bg-gray-200 rounded-full overflow-hidden " + height}>
-      <div
-        className={color + " " + height + " rounded-full transition-all duration-700"}
-        style={{ width: pct + "%" }}
-      />
+      <div className={color + " " + height + " rounded-full transition-all duration-700"} style={{ width: pct + "%" }} />
     </div>
   );
 
@@ -213,12 +214,7 @@ const Dashboard = ({ currentEvent, currentUser }) => {
     );
   }
 
-  const dayLabel =
-    days === null ? "--"
-    : days < 0 ? Math.abs(days) + "d ago"
-    : days === 0 ? "TODAY"
-    : days + " days";
-
+  const dayLabel = days === null ? "--" : days < 0 ? Math.abs(days) + "d ago" : days === 0 ? "TODAY" : days + " days";
   const scores = [ts.pct, rs.pct, dns.pct];
   if (es.total > 0) scores.push(es.pct);
   const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
@@ -229,7 +225,7 @@ const Dashboard = ({ currentEvent, currentUser }) => {
   return (
     <div className="max-w-3xl mx-auto pb-24 px-2 sm:px-0 space-y-4">
 
-      {/* Event Hero Card */}
+      {/* Event Hero */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-500 via-orange-600 to-yellow-500 text-white shadow-lg p-5">
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-8 translate-x-8" />
         <div className="absolute bottom-0 left-0 w-20 h-20 bg-white/10 rounded-full translate-y-6 -translate-x-6" />
@@ -237,10 +233,8 @@ const Dashboard = ({ currentEvent, currentUser }) => {
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <p className="text-orange-100 text-xs font-medium uppercase tracking-wider mb-1">Current Event</p>
-              <h2 className="text-xl sm:text-2xl font-bold leading-tight">{currentEvent.name}</h2>
-              {currentEvent.location && (
-                <p className="text-orange-100 text-sm mt-1">📍 {currentEvent.location}</p>
-              )}
+              <h2 className="text-xl sm:text-2xl font-bold leading-tight">{eventName}</h2>
+              {currentEvent.location && <p className="text-orange-100 text-sm mt-1">📍 {currentEvent.location}</p>}
               {currentEvent.date && (
                 <p className="text-orange-100 text-sm mt-0.5">
                   📅 {new Date(currentEvent.date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}
@@ -249,9 +243,7 @@ const Dashboard = ({ currentEvent, currentUser }) => {
             </div>
             <div className="text-center bg-white/20 backdrop-blur rounded-xl px-3 py-2 min-w-[76px] shrink-0">
               <div className="text-2xl font-extrabold text-white">{dayLabel}</div>
-              <div className="text-orange-100 text-xs mt-0.5">
-                {days === 0 ? "Event Day!" : days > 0 ? "remaining" : "completed"}
-              </div>
+              <div className="text-orange-100 text-xs mt-0.5">{days === 0 ? "Event Day!" : days > 0 ? "remaining" : "completed"}</div>
             </div>
           </div>
           <div className="mt-4 grid grid-cols-4 gap-2">
@@ -270,28 +262,25 @@ const Dashboard = ({ currentEvent, currentUser }) => {
         </div>
       </div>
 
+      {/* Debug info - remove after confirming */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-800">
+        <strong>Debug:</strong> EventID: {eventId || "none"} | Depts: {departments.length} | Tasks: {tasks.length} | Reqs: {requirements.length} | Donors: {donations.length}
+      </div>
+
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={shareWhatsApp}
-          className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white rounded-xl py-3 px-4 font-semibold text-sm shadow transition-all active:scale-95"
-        >
+        <button onClick={shareWhatsApp} className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white rounded-xl py-3 px-4 font-semibold text-sm shadow transition-all active:scale-95">
           <span className="text-lg">📤</span> Share Status
         </button>
-        <button
-          onClick={sharePendingWhatsApp}
-          className="flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white rounded-xl py-3 px-4 font-semibold text-sm shadow transition-all active:scale-95"
-        >
+        <button onClick={sharePendingWhatsApp} className="flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white rounded-xl py-3 px-4 font-semibold text-sm shadow transition-all active:scale-95">
           <span className="text-lg">⚠️</span> Pending Items
         </button>
       </div>
 
-      {/* Tasks Progress */}
+      {/* Tasks */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-gray-800 flex items-center gap-2">
-            <span className="text-xl">✅</span> Task Progress
-          </h3>
+          <h3 className="font-bold text-gray-800 flex items-center gap-2"><span className="text-xl">✅</span> Task Progress</h3>
           <span className="text-2xl font-extrabold text-orange-500">{ts.pct}%</span>
         </div>
         <ProgressBar pct={ts.pct} color="bg-orange-500" height="h-3" />
@@ -322,9 +311,7 @@ const Dashboard = ({ currentEvent, currentUser }) => {
 
       {/* Departments */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-        <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-3">
-          <span className="text-xl">🏢</span> Departments
-        </h3>
+        <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-3"><span className="text-xl">🏢</span> Departments</h3>
         <div className="flex gap-2 flex-wrap mb-3">
           <StatBadge label="Total" value={ds.total} color="bg-purple-100 text-purple-700" />
           <StatBadge label="HOD Assigned" value={ds.withHOD} color="bg-green-100 text-green-700" />
@@ -338,13 +325,9 @@ const Dashboard = ({ currentEvent, currentUser }) => {
           <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-xl">
             <p className="text-xs text-red-600 font-semibold mb-2">Departments Missing HOD:</p>
             <div className="flex flex-wrap gap-1">
-              {departments
-                .filter((d) => !d.hodName || !d.hodName.trim())
-                .map((d) => (
-                  <span key={d.id} className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full">
-                    {d.name}
-                  </span>
-                ))}
+              {departments.filter((d) => !(d.hodName || d.hod || "").trim()).map((d) => (
+                <span key={d.id} className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full">{d.name}</span>
+              ))}
             </div>
           </div>
         )}
@@ -353,9 +336,7 @@ const Dashboard = ({ currentEvent, currentUser }) => {
       {/* Requirements */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-gray-800 flex items-center gap-2">
-            <span className="text-xl">📦</span> Requirements
-          </h3>
+          <h3 className="font-bold text-gray-800 flex items-center gap-2"><span className="text-xl">📦</span> Requirements</h3>
           <span className="text-2xl font-extrabold text-teal-500">{rs.pct}%</span>
         </div>
         <ProgressBar pct={rs.pct} color="bg-teal-500" height="h-3" />
@@ -374,16 +355,10 @@ const Dashboard = ({ currentEvent, currentUser }) => {
       {/* Donations */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-gray-800 flex items-center gap-2">
-            <span className="text-xl">💰</span> Donations vs Budget
-          </h3>
+          <h3 className="font-bold text-gray-800 flex items-center gap-2"><span className="text-xl">💰</span> Donations vs Budget</h3>
           <span className="text-2xl font-extrabold text-yellow-500">{dns.pct}%</span>
         </div>
-        <ProgressBar
-          pct={dns.pct}
-          color={dns.pct >= 100 ? "bg-green-500" : dns.pct >= 60 ? "bg-yellow-400" : "bg-red-400"}
-          height="h-3"
-        />
+        <ProgressBar pct={dns.pct} color={dns.pct >= 100 ? "bg-green-500" : dns.pct >= 60 ? "bg-yellow-400" : "bg-red-400"} height="h-3" />
         <div className="grid grid-cols-2 gap-3 mt-3">
           <div className="bg-green-50 rounded-xl p-3">
             <p className="text-xs text-green-600 font-medium">Received</p>
@@ -395,12 +370,8 @@ const Dashboard = ({ currentEvent, currentUser }) => {
           </div>
         </div>
         <div className={"mt-3 rounded-xl px-4 py-3 flex items-center justify-between " + (dns.surplus >= 0 ? "bg-green-50" : "bg-red-50")}>
-          <span className={"text-sm font-semibold " + (dns.surplus >= 0 ? "text-green-700" : "text-red-700")}>
-            {dns.surplus >= 0 ? "Surplus" : "Deficit"}
-          </span>
-          <span className={"text-lg font-extrabold " + (dns.surplus >= 0 ? "text-green-700" : "text-red-700")}>
-            Rs.{Math.abs(dns.surplus).toLocaleString("en-IN")}
-          </span>
+          <span className={"text-sm font-semibold " + (dns.surplus >= 0 ? "text-green-700" : "text-red-700")}>{dns.surplus >= 0 ? "Surplus" : "Deficit"}</span>
+          <span className={"text-lg font-extrabold " + (dns.surplus >= 0 ? "text-green-700" : "text-red-700")}>Rs.{Math.abs(dns.surplus).toLocaleString("en-IN")}</span>
         </div>
       </div>
 
@@ -408,9 +379,7 @@ const Dashboard = ({ currentEvent, currentUser }) => {
       {es.total > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-gray-800 flex items-center gap-2">
-              <span className="text-xl">🙏</span> Etiquette Briefings
-            </h3>
+            <h3 className="font-bold text-gray-800 flex items-center gap-2"><span className="text-xl">🙏</span> Etiquette Briefings</h3>
             <span className="text-2xl font-extrabold text-indigo-500">{es.pct}%</span>
           </div>
           <ProgressBar pct={es.pct} color="bg-indigo-500" height="h-3" />
@@ -425,9 +394,7 @@ const Dashboard = ({ currentEvent, currentUser }) => {
       {/* Crowd */}
       {cs.zones > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-3">
-            <span className="text-xl">👥</span> Crowd Estimation
-          </h3>
+          <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-3"><span className="text-xl">👥</span> Crowd Estimation</h3>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-blue-50 rounded-xl p-4 text-center">
               <p className="text-3xl font-extrabold text-blue-700">
@@ -445,17 +412,12 @@ const Dashboard = ({ currentEvent, currentUser }) => {
 
       {/* Overall Score */}
       <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-lg p-5 text-white">
-        <h3 className="font-bold text-gray-200 flex items-center gap-2 mb-4">
-          <span className="text-xl">📊</span> Overall Readiness Score
-        </h3>
+        <h3 className="font-bold text-gray-200 flex items-center gap-2 mb-4"><span className="text-xl">📊</span> Overall Readiness Score</h3>
         <div className="text-center">
           <div className={"text-6xl font-black mb-2 " + scoreColor}>{avgScore}%</div>
           <div className={"text-lg font-semibold " + scoreColor}>{scoreLabel}</div>
           <div className="mt-4 w-full bg-gray-700 rounded-full h-4 overflow-hidden">
-            <div
-              className={"h-4 rounded-full transition-all duration-1000 " + scoreBg}
-              style={{ width: avgScore + "%" }}
-            />
+            <div className={"h-4 rounded-full transition-all duration-1000 " + scoreBg} style={{ width: avgScore + "%" }} />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
             {[
