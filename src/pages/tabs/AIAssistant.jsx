@@ -105,32 +105,81 @@ export default function AIAssistant({ eventId }) {
     const teamCount = dept.team ? dept.team.split(",").filter(t => t.trim()).length : 0;
     const hodUser = users.find(u => u.email === dept.hodEmail);
     const lang = hodUser?.preferredLanguage || "english";
+    const crowd = event?.crowdDarshan || "5000";
+    const donna = event?.donnaCount || "0";
+    const maha = event?.mahaCount || "0";
+    const eventName = (event?.festivalName || "") + " - " + (event?.location || "");
 
     setNudgeLoading(dept.id);
     try {
-      const prompt = lang === "telugu"
-        ? `HKM ఉత్సవ HOD కి WhatsApp రిమైండర్ రాయండి (Telugu లో):
-HOD పేరు: ${hodName}, విభాగం: ${dept.name}
-Pending పనులు: ${pendingDeptTasks.map(t => t.title).join(", ") || "లేవు"}
-Team సభ్యులు: ${teamCount} (కనీసం 3 ఉండాలి)
-రోజులు మిగిలాయి: ${daysRemaining}
-*bold* formatting వాడండి. Hare Krishna తో ముగించండి.`
-        : `Write a warm WhatsApp reminder for HKM festival HOD:
-HOD: ${hodName}, Dept: ${dept.name}
-Pending Tasks: ${pendingDeptTasks.map(t => t.title).join(", ") || "None"}
-Team Members: ${teamCount} (minimum 3 needed)
-Days Remaining: ${daysRemaining}
-${teamCount < 3 ? "IMPORTANT: Ask them to add more team members." : ""}
-Use *bold* formatting. Keep it warm and motivating. End with Hare Krishna!`;
+      // AI only gives us 2 things: recommended volunteer count + short task advice
+      const aiPrompt = `For HKM festival department "${dept.name}":
+Crowd: ${crowd}, Donna prasadam: ${donna}, Maha prasadam: ${maha}
+Pending tasks: ${pendingDeptTasks.map(t => t.title).join(", ") || "None"}
+Current team: ${teamCount}
 
-      const msg = await callGroq(prompt, false);
+Return JSON only:
+{
+  "recommendedVolunteers": <number based on dept type and crowd>,
+  "taskAdvice": "<one short sentence about most urgent task, max 10 words>"
+}`;
+
+      const aiData = await callGroq(aiPrompt, true);
+      const recommended = aiData.recommendedVolunteers || 3;
+      const shortage = Math.max(0, recommended - teamCount);
+
+      // We build the message ourselves - AI has no control over format
+      const lines = lang === "telugu" ? [
+        `హరే కృష్ణ ${hodName} గారు 🙏`,
+        "",
+        `*ఉత్సవం:* ${eventName}`,
+        `*విభాగం:* ${dept.name}`,
+        `*మిగిలిన రోజులు:* ${daysRemaining}`,
+        "",
+        `*పెండింగ్ పనులు:*`,
+        ...(pendingDeptTasks.length > 0
+          ? pendingDeptTasks.map(t => `• ${t.title}`)
+          : ["• పెండింగ్ పనులు లేవు"]),
+        "",
+        `*వాలంటీర్ బలం:*`,
+        `• అవసరం: ${recommended}`,
+        `• ప్రస్తుతం: ${teamCount}`,
+        ...(shortage > 0 ? [`• దయచేసి ${shortage} మంది వాలంటీర్లను జోడించండి`] : ["• బలం సరిపోతుంది ✅"]),
+        "",
+        `దయచేసి వీలైనంత త్వరగా చర్య తీసుకోండి.`,
+        "",
+        `హరే కృష్ణ`,
+        `— ${eventName}`,
+      ] : [
+        `Hare Krishna ${hodName} garu 🙏`,
+        "",
+        `*Event:* ${eventName}`,
+        `*Department:* ${dept.name}`,
+        `*Days Remaining:* ${daysRemaining}`,
+        "",
+        `*Pending Tasks:*`,
+        ...(pendingDeptTasks.length > 0
+          ? pendingDeptTasks.map(t => `• ${t.title}`)
+          : ["• No pending tasks ✅"]),
+        "",
+        `*Volunteer Strength:*`,
+        `• Required: ${recommended}`,
+        `• Current: ${teamCount}`,
+        ...(shortage > 0 ? [`• Please add ${shortage} more volunteers to this department`] : ["• Strength is sufficient ✅"]),
+        "",
+        `Please review and take action at the earliest.`,
+        "",
+        `Hare Krishna`,
+        `— ${eventName}`,
+      ];
+
+      const msg = lines.join("\n");
       const phone = hodPhone.replace(/\D/g, "");
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+      window.open("https://wa.me/" + phone + "?text=" + encodeURIComponent(msg), "_blank");
     } catch (e) { alert(e.message); }
     setNudgeLoading(null);
   };
 
-  // ── Missing items ─────────────────────────────────────────────
   const findMissingItems = async () => {
     setLoading(true);
     try {
