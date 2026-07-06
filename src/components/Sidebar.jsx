@@ -120,6 +120,7 @@ export default function Sidebar({ activeTab, setActiveTab, events, selectedEvent
   const { userRole, user } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAIPlanner, setShowAIPlanner] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [creating, setCreating] = useState(false);

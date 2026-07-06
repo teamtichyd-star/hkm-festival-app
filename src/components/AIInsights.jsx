@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { getDashboardInsights, generateWhatsAppSummary } from "../services/gemini";
+
+const GROQ_KEY = "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";
+const PROXY_URL = "https://corsproxy.io/?";
+const API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 export default function AIInsights({ eventName, daysRemaining, ts, ds, rs, dns, es }) {
   const [insights, setInsights] = useState([]);
@@ -7,22 +10,44 @@ export default function AIInsights({ eventName, daysRemaining, ts, ds, rs, dns, 
   const [waLoading, setWaLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const callGroq = async (prompt, jsonMode = false) => {
+    const res = await fetch(PROXY_URL + encodeURIComponent(API_URL), {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + GROQ_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: jsonMode ? 1000 : 500,
+        temperature: 0.7,
+        ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
+      }),
+    });
+    
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error?.message || "AI Request Failed");
+    }
+    const data = await res.json();
+    return data.choices[0].message.content;
+  };
+
   const fetchInsights = async () => {
     setLoading(true);
     setError("");
     try {
-      const result = await getDashboardInsights({
-        eventName,
-        daysRemaining,
-        tasks: { done: ts.done, inProgress: ts.inProgress, pending: ts.pending, total: ts.total },
-        departments: { withHOD: ds.withHOD, missingHOD: ds.missingHOD },
-        requirements: { arranged: rs.arranged, pending: rs.pending },
-        donations: { received: dns.received, budget: dns.totalBudget, surplus: dns.surplus },
-        etiquette: { briefed: es.briefed, total: es.total },
-      });
-      setInsights(result);
+      const prompt = `You are an HKM Festival assistant. Event: ${eventName}, Days: ${daysRemaining}. 
+      Tasks: ${ts.done}/${ts.total}. Reqs: ${rs.arranged}/${rs.total}. 
+      Budget Deficit: Rs.${Math.abs(dns.surplus)}.
+      Give 4 short actionable suggestions as JSON: {"insights":["s1","s2","s3","s4"]}`;
+      
+      const content = await callGroq(prompt, true);
+      const parsed = JSON.parse(content);
+      setInsights(parsed.insights || []);
     } catch (e) {
-      setError("Could not load AI insights. " + e.message);
+      setError(e.message);
     }
     setLoading(false);
   };
@@ -30,66 +55,42 @@ export default function AIInsights({ eventName, daysRemaining, ts, ds, rs, dns, 
   const shareAISummary = async () => {
     setWaLoading(true);
     try {
-      const summary = await generateWhatsAppSummary({
-        eventName,
-        daysRemaining,
-        tasks: ts,
-        departments: ds,
-        requirements: rs,
-        donations: { received: dns.received, budget: dns.totalBudget, surplus: dns.surplus },
-        etiquette: es,
-      });
-      window.open("https://wa.me/?text=" + encodeURIComponent(summary), "_blank");
+      const prompt = `Write a warm motivating WhatsApp message for HKM team for ${eventName} in ${daysRemaining} days. 
+      Summary: Tasks ${ts.pct}%, Reqs ${rs.pct}%, Budget Rs.${dns.received}/${dns.totalBudget}. 
+      Use *bold*. End with Hare Krishna!`;
+      
+      const msg = await callGroq(prompt, false);
+      window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank");
     } catch (e) {
-      alert("AI summary failed: " + e.message);
+      alert("Error: " + e.message);
     }
     setWaLoading(false);
   };
 
   return (
-    <div className="bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-100 rounded-2xl p-4">
+    <div className="bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-100 rounded-2xl p-4 my-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-gray-800 flex items-center gap-2">
-          <span className="text-xl">✨</span> AI Insights
-        </h3>
-        <button
-          onClick={shareAISummary}
-          disabled={waLoading}
-          className="flex items-center gap-1 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all disabled:opacity-50"
-        >
-          {waLoading ? "Generating..." : "AI WhatsApp"}
+        <h3 className="font-bold text-gray-800 flex items-center gap-2"><span className="text-xl">✨</span> AI Insights</h3>
+        <button onClick={shareAISummary} disabled={waLoading} className="bg-green-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50">
+          {waLoading ? "..." : "AI WhatsApp"}
         </button>
       </div>
-
       {insights.length === 0 && !loading && (
         <div className="text-center py-4">
-          <p className="text-sm text-gray-500 mb-3">Get AI-powered suggestions based on current event status</p>
-          <button onClick={fetchInsights} className="bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-semibold px-6 py-2 rounded-xl hover:opacity-90 transition-all">
+          <button onClick={fetchInsights} className="bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-semibold px-6 py-2 rounded-xl">
             ✨ Get AI Suggestions
           </button>
         </div>
       )}
-
-      {loading && (
-        <div className="flex items-center gap-3 py-4">
-          <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin shrink-0" />
-          <p className="text-sm text-purple-600">AI is analyzing your event...</p>
-        </div>
-      )}
-
-      {error && <p className="text-red-500 text-xs bg-red-50 p-2 rounded-lg mt-2">{error}</p>}
-
+      {loading && <p className="text-sm text-center py-4 animate-pulse text-purple-600">AI is analyzing...</p>}
+      {error && <p className="text-red-500 text-xs text-center">{error}</p>}
       {insights.length > 0 && (
         <div className="space-y-2">
-          {insights.map((insight, i) => (
-            <div key={i} className="flex items-start gap-2 bg-white rounded-xl p-3 shadow-sm">
-              <span className="text-purple-500 font-bold text-sm shrink-0">{i + 1}.</span>
-              <p className="text-sm text-gray-700">{insight}</p>
+          {insights.map((ins, i) => (
+            <div key={i} className="bg-white p-3 rounded-xl shadow-sm text-sm text-gray-700 flex gap-2">
+              <span className="font-bold text-purple-500">{i+1}.</span>{ins}
             </div>
           ))}
-          <button onClick={fetchInsights} className="w-full text-xs text-purple-500 hover:text-purple-700 pt-1 text-center">
-            Refresh suggestions
-          </button>
         </div>
       )}
     </div>
