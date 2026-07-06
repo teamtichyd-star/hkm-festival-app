@@ -1,75 +1,161 @@
 import { useState, useEffect } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, getDocs, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../../firebase";
 
 const GROQ_KEY = "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";
 
 export default function AIAssistant({ eventId }) {
-  const [data, setData] = useState({ tasks: [], depts: [], event: null });
-  const [insights, setInsights] = useState([]);
+  const [data, setData] = useState({ tasks: [], depts: [], requirements: [], checkpoints: [], etiquette: [] });
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [view, setStep] = useState("hub"); // hub | planner | results
+  const [insights, setInsights] = useState([]);
+  const [plan, setPlan] = useState(null);
+  const [form, setForm] = useState({ crowd: "1000", duration: "8", details: "" });
 
   useEffect(() => {
     if (!eventId) return;
     const unsub1 = onSnapshot(collection(db, "events", eventId, "tasks"), s => 
-      setData(prev => ({ ...prev, tasks: s.docs.map(d => d.data()) })));
+      setData(p => ({ ...prev, ...p, tasks: s.docs.map(d => ({id: d.id, ...d.data()})) })));
     const unsub2 = onSnapshot(collection(db, "events", eventId, "departments"), s => 
-      setData(prev => ({ ...prev, depts: s.docs.map(d => d.data()) })));
+      setData(p => ({ ...prev, ...p, depts: s.docs.map(d => ({id: d.id, ...d.data()})) })));
     return () => { unsub1(); unsub2(); };
   }, [eventId]);
 
-  const askAI = async () => {
-    setLoading(true);
-    try {
-      const prompt = `HKM Event status: ${data.depts.length} departments, ${data.tasks.length} tasks. 
-      Pending tasks: ${data.tasks.filter(t => t.status !== "Done").length}. 
-      Give 5 specific actionable suggestions for the coordinator. 
-      Format: JSON object {"suggestions": ["s1","s2","s3","s4","s5"]}`;
+  const callGroq = async (prompt, json = true) => {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        ...(json ? { response_format: { type: "json_object" } } : {})
+      })
+    });
+    const d = await res.json();
+    return json ? JSON.parse(d.choices[0].message.content) : d.choices[0].message.content;
+  };
 
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" }
-        })
-      });
-      const result = await res.json();
-      const parsed = JSON.parse(result.choices[0].message.content);
-      setInsights(parsed.suggestions || []);
-    } catch (e) {
-      alert("AI Error: " + e.message);
-    }
+  const getHODReminders = () => {
+    const list = data.depts.map(d => {
+      const pending = data.tasks.filter(t => t.department === d.name && t.status !== "Done");
+      return { ...d, pendingCount: pending.length, pendingTasks: pending.map(p => p.title) };
+    }).filter(d => d.pendingCount > 0);
+    return list;
+  };
+
+  const nudgeHOD = async (hod) => {
+    const prompt = `Write a short, warm, motivating WhatsApp nudge for an HKM festival HOD. 
+    HOD: ${hod.hodName || hod.hod || 'HOD'}, Dept: ${hod.name}. 
+    Pending Tasks: ${hod.pendingTasks.join(", ")}. 
+    Use *bold* for emphasis. End with Hare Krishna!`;
+    setLoading(true);
+    const msg = await callGroq(prompt, false);
+    setLoading(false);
+    window.open(`https://wa.me/${hod.hodPhone || hod.contact || ''}?text=${encodeURIComponent(msg)}`, "_blank");
+  };
+
+  const generatePlan = async () => {
+    setLoading(true);
+    const prompt = `Plan HKM Festival. Crowd: ${form.crowd}, Hours: ${form.duration}, Details: ${form.details}. 
+    Return JSON: {"depts":[{"name":"","responsibility":""}],"tasks":[{"title":"","phase":"","department":""}],"requirements":[{"item":"","qty":""}]}`;
+    const res = await callGroq(prompt);
+    setPlan(res);
+    setStep("results");
     setLoading(false);
   };
 
+  const saveToEvent = async () => {
+    setLoading(true);
+    for (const d of (plan.depts || [])) await addDoc(collection(db, "events", eventId, "departments"), d);
+    for (const t of (plan.tasks || [])) await addDoc(collection(db, "events", eventId, "tasks"), t);
+    for (const r of (plan.requirements || [])) await addDoc(collection(db, "events", eventId, "requirements"), r);
+    setStep("hub");
+    setLoading(false);
+    alert("Saved successfully!");
+  };
+
   return (
-    <div className="p-4 max-w-4xl mx-auto">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 text-center">
-        <div className="text-5xl mb-4">✨</div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">AI Festival Assistant</h2>
-        <p className="text-gray-500 mb-6 text-sm">Analyze your event and get smart suggestions to speed up preparation.</p>
-        
-        <button 
-          onClick={askAI}
-          disabled={loading}
-          className="bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-3 px-8 rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
-        >
-          {loading ? "AI is thinking..." : "✨ Analyze Event & Give Suggestions"}
-        </button>
+    <div className="p-4 max-w-4xl mx-auto space-y-6">
+      {/* Navigation Header */}
+      <div className="flex bg-white p-1 rounded-2xl border border-gray-100 shadow-sm">
+        {["hub", "planner"].map(t => (
+          <button key={t} onClick={() => setStep(t)} className={`flex-1 py-2 rounded-xl text-sm font-bold capitalize transition-all ${view === t ? 'bg-purple-600 text-white' : 'text-gray-500'}`}>
+            {t === 'hub' ? '🚀 Action Hub' : '✨ AI Planner'}
+          </button>
+        ))}
       </div>
 
-      {insights.length > 0 && (
-        <div className="mt-6 space-y-3">
-          <h3 className="font-bold text-gray-700 ml-1">AI Suggestions:</h3>
-          {insights.map((s, i) => (
-            <div key={i} className="bg-purple-50 border border-purple-100 p-4 rounded-xl flex gap-3 items-start">
-              <span className="bg-purple-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0">{i+1}</span>
-              <p className="text-gray-700 text-sm leading-relaxed">{s}</p>
+      {view === "hub" && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm text-center">
+            <h2 className="text-xl font-bold text-gray-800">Action Hub</h2>
+            <p className="text-sm text-gray-500 mt-1">Nudge HODs to finish pending tasks</p>
+          </div>
+          
+          <div className="grid gap-3">
+            {getHODReminders().map((hod, i) => (
+              <div key={i} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-gray-800">{hod.name}</h4>
+                  <p className="text-xs text-red-500 font-bold">{hod.pendingCount} Pending Tasks</p>
+                  <p className="text-[10px] text-gray-400">HOD: {hod.hodName || hod.hod || 'Unassigned'}</p>
+                </div>
+                <button onClick={() => nudgeHOD(hod)} className="bg-green-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm flex items-center gap-1">
+                  WhatsApp Nudge
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {view === "planner" && (
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+          <h2 className="text-xl font-bold text-gray-800">Smart Event Planner</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold text-gray-400 ml-1">Expected Crowd</label>
+              <input type="number" value={form.crowd} onChange={e => setForm({...form, crowd: e.target.value})} className="w-full bg-gray-50 border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500" />
             </div>
-          ))}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold text-gray-400 ml-1">Duration (Hours)</label>
+              <input type="number" value={form.duration} onChange={e => setForm({...form, duration: e.target.value})} className="w-full bg-gray-50 border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold text-gray-400 ml-1">Additional Details</label>
+            <textarea value={form.details} onChange={e => setForm({...form, details: e.target.value})} className="w-full bg-gray-50 border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500" rows="3" placeholder="Route details, VIP list, etc..."></textarea>
+          </div>
+          <button onClick={generatePlan} disabled={loading} className="w-full bg-purple-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-purple-200 disabled:opacity-50">
+            {loading ? "AI is planning..." : "✨ Generate Full Event Plan"}
+          </button>
+        </div>
+      )}
+
+      {view === "results" && plan && (
+        <div className="space-y-4 pb-20">
+          <div className="bg-purple-600 p-6 rounded-3xl text-white">
+            <h2 className="text-xl font-bold">AI Plan Preview</h2>
+            <p className="text-sm opacity-80">Review before adding to your event tabs</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-white p-3 rounded-2xl text-center shadow-sm">
+                <p className="text-lg font-bold">{plan.depts?.length || 0}</p>
+                <p className="text-[10px] text-gray-500">Depts</p>
+            </div>
+            <div className="bg-white p-3 rounded-2xl text-center shadow-sm">
+                <p className="text-lg font-bold">{plan.tasks?.length || 0}</p>
+                <p className="text-[10px] text-gray-500">Tasks</p>
+            </div>
+            <div className="bg-white p-3 rounded-2xl text-center shadow-sm">
+                <p className="text-lg font-bold">{plan.requirements?.length || 0}</p>
+                <p className="text-[10px] text-gray-500">Reqs</p>
+            </div>
+          </div>
+          <button onClick={saveToEvent} disabled={loading} className="w-full bg-green-600 text-white font-bold py-4 rounded-2xl shadow-lg">
+            {loading ? "Adding to tabs..." : "➕ Add to All Tabs Now"}
+          </button>
+          <button onClick={() => setStep("planner")} className="w-full text-gray-400 text-xs py-2">Discard and try again</button>
         </div>
       )}
     </div>
