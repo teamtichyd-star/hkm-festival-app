@@ -60,8 +60,22 @@ export default function AIAssistant({ eventId }) {
   const generatePlan = async () => {
     setLoading(true);
     try {
-      const prompt = `Plan HKM Festival. Crowd: ${form.crowd}, Hours: ${form.duration}, Details: ${form.details}. 
-      Return JSON: {"depts":[{"name":"","responsibility":"","order":1}],"tasks":[{"title":"","phase":"pre","department":"","status":"Not Started","order":1}],"requirements":[{"item":"","quantity":"","unit":"","status":"Pending","cost":0}]}`;
+      const prompt = `You are an expert HKM (Hare Krishna Movement) festival planner in India.
+Plan a complete Ratha Yatra festival with these details:
+- Expected Crowd: ${form.crowd} for dinner, 5000 total darshan
+- Duration: ${form.duration} hours
+- Additional Info: ${form.details}
+
+Generate a COMPREHENSIVE plan. Return ONLY this JSON with AT LEAST:
+- 12 departments 
+- 20 tasks (split across pre/event/post phases)
+- 15 requirements with realistic quantities and costs in INR
+
+{"depts":[{"name":"string","responsibility":"string","order":1,"budget":0}],
+"tasks":[{"title":"string","phase":"pre","department":"string","status":"Not Started","order":1,"owner":""}],
+"requirements":[{"item":"string","quantity":"string","unit":"string","department":"string","status":"Pending","cost":0,"notes":"string"}]}
+
+Make everything specific to Ratha Yatra with 2 carts, procession, prasadam distribution for 5000 people.`;
       const res = await callGroq(prompt);
       setPlan(res);
       setView("results");
