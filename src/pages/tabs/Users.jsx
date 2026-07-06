@@ -330,6 +330,16 @@ export default function Users({ eventId }) {
                         {u.phone && (
                           <button onClick={() => sendWhatsAppTo(u.phone, `Hare Krishna ${u.name}!`)} className="bg-green-500 text-white p-1 rounded-lg text-xs">💬</button>
                         )}
+                      <select
+                        className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 mt-1 w-full"
+                        value={u.preferredLanguage || "english"}
+                        onChange={(e) => updateUserField(u.id, "preferredLanguage", e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        title="WhatsApp message language preference"
+                      >
+                        <option value="english">🇬🇧 English Messages</option>
+                        <option value="telugu">🇮🇳 Telugu Messages</option>
+                      </select>
                       </div>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {isSuperAdmin ? (
