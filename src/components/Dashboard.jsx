@@ -129,57 +129,108 @@ const Dashboard = ({ currentEvent, currentUser }) => {
   const eventName = currentEvent?.festivalName || currentEvent?.name || "Festival";
 
   const shareWhatsApp = () => {
-    const lines = [];
-    lines.push("*" + eventName + " - Status Report*");
-    if (currentEvent?.date) lines.push("Date: " + new Date(currentEvent.date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }));
-    if (currentEvent?.location) lines.push("Location: " + currentEvent.location);
-    if (days !== null) lines.push("Days: *" + (days > 0 ? days + " days remaining" : days === 0 ? "TODAY!" : "Event Passed") + "*");
-    lines.push("");
-    lines.push("*Tasks:* " + ts.done + "/" + ts.total + " done (" + ts.pct + "%)");
-    lines.push("  In Progress: " + ts.inProgress + " | Pending: " + ts.pending);
-    lines.push("");
-    lines.push("*Departments:* " + ds.total + " total");
-    lines.push("  With HOD: " + ds.withHOD + " | Missing HOD: " + ds.missingHOD);
-    lines.push("  Budget: Rs." + ds.totalBudget.toLocaleString("en-IN"));
-    lines.push("");
-    lines.push("*Requirements:* " + rs.arranged + "/" + rs.total + " arranged (" + rs.pct + "%)");
-    lines.push("  Pending: " + rs.pending + " | Cost: Rs." + rs.totalCost.toLocaleString("en-IN"));
-    lines.push("");
-    lines.push("*Donations:* Rs." + dns.received.toLocaleString("en-IN") + " received");
-    lines.push("  Budget: Rs." + dns.totalBudget.toLocaleString("en-IN") + " | " + (dns.surplus >= 0 ? "Surplus" : "Deficit") + ": Rs." + Math.abs(dns.surplus).toLocaleString("en-IN"));
-    if (es.total > 0) { lines.push(""); lines.push("*Etiquette:* " + es.briefed + "/" + es.total + " (" + es.pct + "%)"); }
-    if (cs.zones > 0) { lines.push(""); lines.push("*Crowd Estimate:* " + cs.totalEstimate.toLocaleString("en-IN") + " across " + cs.zones + " zones"); }
-    lines.push(""); lines.push("_Shared from HKM Festival App_");
-    window.open("https://wa.me/?text=" + encodeURIComponent(lines.join("\n")), "_blank");
+    const dayText =
+      days === null
+        ? null
+        : days > 0
+          ? `${days} days remaining`
+          : days === 0
+            ? "Today"
+            : "Event completed";
+
+    const lines = [
+      `🎉 *${eventName} - Status Report*`,
+      "",
+      ...(currentEvent?.date
+        ? [`📅 *Date:* ${new Date(currentEvent.date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}`]
+        : []),
+      ...(currentEvent?.location ? [`📍 *Location:* ${currentEvent.location}`] : []),
+      ...(dayText ? [`⏳ *Days Remaining:* ${dayText}`] : []),
+      "",
+      "━━━━━━━━━━━━━━",
+      "✅ *TASKS*",
+      `• Done: ${ts.done}/${ts.total} (${ts.pct}%)`,
+      `• In Progress: ${ts.inProgress}`,
+      `• Pending: ${ts.pending}`,
+      "",
+      "🏢 *DEPARTMENTS*",
+      `• Total: ${ds.total}`,
+      `• HOD Assigned: ${ds.withHOD}`,
+      `• Missing HOD: ${ds.missingHOD}`,
+      `• Budget: Rs.${ds.totalBudget.toLocaleString("en-IN")}`,
+      "",
+      "📦 *REQUIREMENTS*",
+      `• Arranged: ${rs.arranged}/${rs.total} (${rs.pct}%)`,
+      `• Pending: ${rs.pending}`,
+      `• Cost: Rs.${rs.totalCost.toLocaleString("en-IN")}`,
+      "",
+      "💰 *DONATIONS*",
+      `• Received: Rs.${dns.received.toLocaleString("en-IN")}`,
+      `• Budget Needed: Rs.${dns.totalBudget.toLocaleString("en-IN")}`,
+      `• ${dns.surplus >= 0 ? "Surplus" : "Deficit"}: Rs.${Math.abs(dns.surplus).toLocaleString("en-IN")}`,
+      ...(es.total > 0
+        ? ["", "🙏 *ETIQUETTE*", `• Briefed: ${es.briefed}/${es.total} (${es.pct}%)`]
+        : []),
+      ...(cs.zones > 0
+        ? ["", "👥 *CROWD ESTIMATE*", `• Total Estimate: ${cs.totalEstimate.toLocaleString("en-IN")}`, `• Zones: ${cs.zones}`]
+        : []),
+      "",
+      "📲 _Shared from HKM Festival App_",
+    ];
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`, "_blank");
   };
 
   const sharePendingWhatsApp = () => {
     const pendingTasks = tasks.filter((t) => t.status !== "Done");
     const pendingReqs = requirements.filter((r) => r.status !== "Arranged");
     const missingDepts = departments.filter((d) => !(d.hodName || d.hod || "").trim());
-    const lines = [];
-    lines.push("*" + eventName + " - Pending Items*");
-    lines.push("");
+
+    const lines = [
+      `⚠️ *${eventName} - Pending Items*`,
+      "",
+      ...(currentEvent?.date
+        ? [`📅 *Date:* ${new Date(currentEvent.date).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}`]
+        : []),
+      ...(currentEvent?.location ? [`📍 *Location:* ${currentEvent.location}`] : []),
+      "",
+      "━━━━━━━━━━━━━━",
+    ];
+
     if (pendingTasks.length > 0) {
-      lines.push("*Pending Tasks (" + pendingTasks.length + "):*");
-      pendingTasks.slice(0, 10).forEach((t) => lines.push("  - " + (t.title || t.task || "Task") + " [" + (t.status || "Pending") + "]"));
-      if (pendingTasks.length > 10) lines.push("  ...and " + (pendingTasks.length - 10) + " more");
+      lines.push(`✅ *PENDING TASKS (${pendingTasks.length})*`);
+      pendingTasks.slice(0, 10).forEach((t) => {
+        lines.push(`• ${t.title || t.task || "Task"} — ${t.status || "Pending"}`);
+      });
+      if (pendingTasks.length > 10) lines.push(`• ...and ${pendingTasks.length - 10} more`);
       lines.push("");
     }
+
     if (pendingReqs.length > 0) {
-      lines.push("*Pending Requirements (" + pendingReqs.length + "):*");
-      pendingReqs.slice(0, 8).forEach((r) => lines.push("  - " + (r.item || r.name || "Item") + " [" + (r.status || "Pending") + "]"));
-      if (pendingReqs.length > 8) lines.push("  ...and " + (pendingReqs.length - 8) + " more");
+      lines.push(`📦 *PENDING REQUIREMENTS (${pendingReqs.length})*`);
+      pendingReqs.slice(0, 8).forEach((r) => {
+        lines.push(`• ${r.item || r.name || "Item"} — ${r.status || "Pending"}`);
+      });
+      if (pendingReqs.length > 8) lines.push(`• ...and ${pendingReqs.length - 8} more`);
       lines.push("");
     }
+
     if (missingDepts.length > 0) {
-      lines.push("*Departments Missing HOD (" + missingDepts.length + "):*");
-      missingDepts.forEach((d) => lines.push("  - " + d.name));
+      lines.push(`🏢 *DEPARTMENTS MISSING HOD (${missingDepts.length})*`);
+      missingDepts.forEach((d) => {
+        lines.push(`• ${d.name}`);
+      });
       lines.push("");
     }
-    if (pendingTasks.length === 0 && pendingReqs.length === 0 && missingDepts.length === 0) lines.push("All items completed!");
-    lines.push("_Shared from HKM Festival App_");
-    window.open("https://wa.me/?text=" + encodeURIComponent(lines.join("\n")), "_blank");
+
+    if (pendingTasks.length === 0 && pendingReqs.length === 0 && missingDepts.length === 0) {
+      lines.push("🎉 No pending items. Everything looks clear.");
+      lines.push("");
+    }
+
+    lines.push("📲 _Shared from HKM Festival App_");
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`, "_blank");
   };
 
   const ProgressBar = ({ pct, color = "bg-orange-500", height = "h-3" }) => (
