@@ -92,7 +92,7 @@ function AppLayout() {
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
         />
-        <main className="flex-1 overflow-y-auto pb-20 md:pb-4">
+        <main className="flex-1 overflow-y-auto relative z-10 pb-20 md:pb-4">
           <div className="max-w-5xl mx-auto p-4">
             {renderTab()}
           </div>
