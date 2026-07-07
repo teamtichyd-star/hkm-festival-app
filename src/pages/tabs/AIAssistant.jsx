@@ -3,7 +3,7 @@ import { collection, onSnapshot, addDoc, doc, getDoc, updateDoc } from "firebase
 import { db } from "../../firebase";
 import { useAuth } from "../../context/AuthContext";
 
-const GROQ_KEY = "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";
+const GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
 const callGroq = async (prompt, json = true) => {
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {

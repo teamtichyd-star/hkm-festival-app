@@ -3,7 +3,7 @@ import { db } from "../../firebase";
 import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs, writeBatch, setDoc } from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
 
-const GROQ_KEY = "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";
+const GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
 export default function Prasadam({ eventId }) {
   const { userData } = useAuth();
