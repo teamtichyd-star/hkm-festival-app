@@ -18,6 +18,16 @@ import Users from "./pages/tabs/Users";
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { db } from "./firebase";
 
+const EVENT_COLORS = [
+  { bg: "bg-orange-500", border: "border-orange-500", text: "text-orange-700", light: "bg-orange-50" },
+  { bg: "bg-blue-500", border: "border-blue-500", text: "text-blue-700", light: "bg-blue-50" },
+  { bg: "bg-green-500", border: "border-green-500", text: "text-green-700", light: "bg-green-50" },
+  { bg: "bg-purple-500", border: "border-purple-500", text: "text-purple-700", light: "bg-purple-50" },
+  { bg: "bg-red-500", border: "border-red-500", text: "text-red-700", light: "bg-red-50" },
+  { bg: "bg-teal-500", border: "border-teal-500", text: "text-teal-700", light: "bg-teal-50" },
+  { bg: "bg-pink-500", border: "border-pink-500", text: "text-pink-700", light: "bg-pink-50" },
+];
+
 function AppLayout() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [events, setEvents] = useState([]);
@@ -55,6 +65,9 @@ function AppLayout() {
     }
   }, [selectedEventId, events]);
 
+  const eventIndex = events.findIndex(e => e.id === selectedEventId);
+  const currentEventColor = EVENT_COLORS[eventIndex % EVENT_COLORS.length] || EVENT_COLORS[0];
+
   const renderTab = () => {
     if (!selectedEventId && activeTab !== "users") return (
       <div className="flex flex-col items-center justify-center py-20 text-gray-400 px-4">
@@ -83,7 +96,12 @@ function AppLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Header event={selectedEvent} onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+      <Header event={selectedEvent} onMenuClick={() => setSidebarOpen(!sidebarOpen)} eventColor={currentEventColor} />
+      {selectedEvent && (
+        <div className={`${currentEventColor.bg} text-white text-center py-1.5 text-xs font-bold tracking-wide shadow-sm`}>
+          Currently editing: {selectedEvent.festivalName} — {selectedEvent.location}
+        </div>
+      )}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           activeTab={activeTab}

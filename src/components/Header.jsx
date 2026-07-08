@@ -3,7 +3,7 @@ import { useState } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function Header({ event, onMenuClick }) {
+export default function Header({ event, onMenuClick, eventColor }) {
   const { user, userRole, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -36,7 +36,7 @@ export default function Header({ event, onMenuClick }) {
   };
 
   return (
-    <div className="bg-gradient-to-r from-orange-600 via-orange-500 to-yellow-500 text-white shadow-lg relative z-30">
+    <div className={(eventColor?.bg || "bg-orange-500") + " text-white shadow-lg relative z-30"}>
       <div className="max-w-full mx-auto px-3 py-2.5">
         <div className="flex justify-between items-center gap-2">
 
