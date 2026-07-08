@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebase";
-import { doc, deleteDoc, collection, addDoc } from "firebase/firestore";
+import { doc, deleteDoc, collection, addDoc, getDocs, getDoc, setDoc } from "firebase/firestore";
 import AIEventPlanner from "./AIEventPlanner";
 
 const tabs = [
@@ -28,21 +28,108 @@ export default function Sidebar({ activeTab, setActiveTab, events, selectedEvent
     festivalName: "", location: "", date: "", 
     startLoc: "", endLoc: "", 
     procStart: "", procEnd: "", dinnerTime: "",
-    crowdDarshan: "", crowdDinner: "",
+    crowdDarshan: "",
     donnaCount: "", mahaCount: "", volunteerCount: "",
     vipGuests: false, details: "" 
   });
 
   const canManage = userData?.globalRole === "superadmin" || userData?.role === "admin";
 
+  
+  const cloneCollection = async (sourceEventId, targetEventId, colName, transformFn = (x) => x) => {
+    const snap = await getDocs(collection(db, "events", sourceEventId, colName));
+    for (const d of snap.docs) {
+      await addDoc(collection(db, "events", targetEventId, colName), transformFn(d.data()));
+    }
+  };
+
   const createEvent = async () => {
     if (!form.festivalName || !form.location) return alert("Name and Location required!");
     try {
-      await addDoc(collection(db, "events"), { ...form, createdAt: new Date() });
+      const newEventRef = await addDoc(collection(db, "events"), { ...form, createdAt: new Date() });
+      const newEventId = newEventRef.id;
+
+      // Clone current selected event as master template (without users/live progress)
+      if (selectedEventId) {
+        // Departments: copy structure, clear HOD/user-specific fields
+        await cloneCollection(selectedEventId, newEventId, "departments", (d) => ({
+          ...d,
+          hodName: "",
+          hod: "",
+          hodEmail: "",
+          hodPhone: "",
+          contact: "",
+          team: "",
+        }));
+
+        // Tasks: copy titles/phase/department/order, reset status & owner
+        await cloneCollection(selectedEventId, newEventId, "tasks", (t) => ({
+          ...t,
+          status: "Not Started",
+          owner: "",
+          assignedTo: "",
+          progress: 0,
+        }));
+
+        // Requirements: copy items/qty/cost, reset status
+        await cloneCollection(selectedEventId, newEventId, "requirements", (r) => ({
+          ...r,
+          status: "Pending",
+        }));
+
+        // Crowd / route checkpoints
+        await cloneCollection(selectedEventId, newEventId, "checkpoints", (c) => ({ ...c }));
+
+        // Etiquette
+        await cloneCollection(selectedEventId, newEventId, "etiquette", (e) => ({ ...e }));
+
+        // Prasadam template
+        await cloneCollection(selectedEventId, newEventId, "prasadam_maha", (m) => ({
+          ...m,
+          name: m.name || "",
+        }));
+
+        await cloneCollection(selectedEventId, newEventId, "prasadam_donna", (d) => ({
+          ...d,
+          variety: d.variety || "",
+          count: 0,
+        }));
+
+        // Prasadam counts doc: reset
+        await setDoc(doc(db, "events", newEventId, "prasadam_counts", "total"), {
+          adultCount: 0,
+          childCount: 0,
+        }, { merge: true });
+
+        // Crowd config doc if exists
+        const crowdConfig = await getDoc(doc(db, "events", selectedEventId, "crowd", "config"));
+        if (crowdConfig.exists()) {
+          await setDoc(doc(db, "events", newEventId, "crowd", "config"), crowdConfig.data(), { merge: true });
+        }
+      }
+
+      setSelectedEventId(newEventId);
       setShowNewEvent(false);
-      setForm({ festivalName: "", location: "", date: "" }); // Reset
-    } catch (e) { alert(e.message); }
+      setForm({
+        festivalName: "",
+        location: "",
+        date: "",
+        startLoc: "",
+        endLoc: "",
+        procStart: "",
+        procEnd: "",
+        donnaCount: "",
+        mahaCount: "",
+        crowdDarshan: "",
+        volunteerCount: "",
+        details: ""
+      });
+      alert("New event created with full template!");
+    } catch (e) {
+      alert(e.message);
+    }
   };
+
 
   const deleteEvent = async (eid) => {
     const currentEvent = events.find(e => e.id === eid);
@@ -86,8 +173,7 @@ export default function Sidebar({ activeTab, setActiveTab, events, selectedEvent
                   </div>
                   <div className="grid grid-cols-2 gap-1">
                     <input type="number" placeholder="Crowd (Total)" className="p-2 border rounded" value={form.crowdDarshan} onChange={e => setForm({...form, crowdDarshan: e.target.value})} />
-                    <input type="number" placeholder="Dinner Count" className="p-2 border rounded" value={form.crowdDinner} onChange={e => setForm({...form, crowdDinner: e.target.value})} />
-                  </div>
+</div>
                   <div className="grid grid-cols-2 gap-1">
                     <input type="number" placeholder="Donna Count" className="p-2 border rounded" value={form.donnaCount} onChange={e => setForm({...form, donnaCount: e.target.value})} />
                     <input type="number" placeholder="Maha Count" className="p-2 border rounded" value={form.mahaCount} onChange={e => setForm({...form, mahaCount: e.target.value})} />

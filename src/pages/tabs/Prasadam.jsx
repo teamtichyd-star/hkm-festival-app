@@ -43,9 +43,14 @@ export default function Prasadam({ eventId }) {
   }, [eventId]);
 
   const saveCounts = async (field, value) => {
+    const val = value === "" ? 0 : parseInt(value);
     const ref = doc(db, "events", eventId, "prasadam_config", "counts");
-    await setDoc(ref, { [field]: value }, { merge: true });
-    setCounts(prev => ({ ...prev, [field]: value }));
+    try {
+      await setDoc(ref, { [field]: val }, { merge: true });
+      setCounts(prev => ({ ...prev, [field]: val }));
+    } catch (e) {
+      console.error("Error saving counts:", e);
+    }
   };
 
   const totalMaha = (parseInt(counts.adultCount) || 0) + Math.ceil((parseInt(counts.childCount) || 0) / 2);
