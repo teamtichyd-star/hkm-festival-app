@@ -5,13 +5,14 @@ import { useAuth } from "../../context/AuthContext";
 import { shareToWhatsApp, sendWhatsAppTo } from "../../utils/whatsapp";
 
 const DEPT_CATEGORIES = {
-  "Coordination": ["Overall Coordinator", "Facilities Team", "Lakshmi Seva (Donations)"],
-  "Deities & Ratha": ["Deities", "Ratha Arrangement", "Decoration of Ratha and Deities", "Flower Decoration"],
-  "Prasadam": ["Cooking (Prasadam Kitchen)", "Main Prasadam Distribution", "Dhonna Prasadam Distribution", "Water for Ratha Yatra", "Water at Lunch Menu"],
-  "VIP & Guests": ["Bahumana for VIPs", "Inviting Devotees"],
-  "Spiritual": ["Mantra Cards Distribution", "Kirtan Team", "Ratha Pulling", "Rangoli", "Books Distribution", "Applying Tilak"],
-  "Cultural & Support": ["Local People Engagement", "Sweeping / Cleaning in Front", "Flags", "Speakers (Sound)", "Kolatam Teams"],
-  "Logistics & Safety": ["Security and Crowd Control", "Medical and First Aid", "Permissions (Police/Municipal)", "Parking Management", "Photography and Videography", "Overall Sanitation"],
+  "Coordination": ["Overall Coordinator", "Facilities Team", "Lakshmi Seva", "Lakshmi Seva (Donations)"],
+  "Deities & Ratha": ["Deities", "Ratha Arrangement", "Decoration of Ratha and Deities", "Decoration", "Flower Decoration"],
+  "Prasadam": ["Cooking", "Prasadam Kitchen", "Main Prasadam", "Dinner Prasadam", "Dhonna Prasadam", "Donna Prasadam", "Water for Ratha", "Water at Lunch", "Water at Final", "Drinking water", "Water supply"],
+  "VIP & Guests": ["Bahumana for VIPs", "Bahumana", "Inviting Devotees", "Inviting"],
+  "Spiritual": ["Mantra Cards", "Kirtan Team", "Kirtan", "Ratha Pulling", "Rangoli", "Books Distribution", "Applying Tilak", "Tilak"],
+  "Cultural & Support": ["Local People", "Sweeping", "Cleaning", "Flags", "Speakers", "Sound", "Kolatam"],
+  "Logistics & Safety": ["Security", "Crowd Control", "Medical", "First Aid", "Permissions", "Police", "Municipal", "Parking", "Photography", "Videography", "Sanitation", "Venue Arrangement", "Venue"],
+  "Publicity & Outreach": ["Publicity", "Outreach", "Banners", "Posters", "Social Media"],
 };
 
 export default function Departments({ eventId }) {
@@ -108,7 +109,7 @@ export default function Departments({ eventId }) {
   filteredDepts.forEach(d => {
     let placed = false;
     for (const [cat, names] of Object.entries(DEPT_CATEGORIES)) {
-      if (names.some(n => d.name?.includes(n) || n.includes(d.name))) {
+      if (names.some(n => d.name?.toLowerCase().includes(n.toLowerCase()) || n.toLowerCase().includes(d.name?.toLowerCase()))) {
         if (!groupedDepts[cat]) groupedDepts[cat] = [];
         groupedDepts[cat].push(d);
         placed = true;
